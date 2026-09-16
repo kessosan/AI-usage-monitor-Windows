@@ -87,14 +87,9 @@ L'actualisation a lieu toutes les 2 minutes par défaut, avec un intervalle rég
 ```
 src/
   Program.cs       point d'entrée, instance unique, TLS
-  UsageClient.cs   obtention du jeton + appel API + parsing (logique à porter pour le web / macOS)
+  UsageClient.cs   obtention du jeton + appel API + parsing
   Settings.cs      préférences .ini, jeton chiffré (DPAPI), lancement au démarrage (registre HKCU)
   ConfigForm.cs    fenêtre de configuration de l'accès au compte
   WidgetForm.cs    fenêtre, dessin, thèmes, icône de notification, menu
 build.ps1          compilation avec csc.exe
 ```
-
-## Pistes pour la suite
-
-- **Application web** : un tout petit serveur local (Node ou Python) qui appelle le même endpoint et sert une page. Le jeton ne doit jamais passer par le navigateur ni par un service tiers.
-- **Widget macOS** : sur macOS, Claude Code stocke le jeton dans le Trousseau (service `Claude Code-credentials`), pas dans un fichier. Deux options : un widget SwiftUI/WidgetKit, ou une app de barre de menus.
