@@ -108,6 +108,50 @@ Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
 - **Abonnements concernés** : Claude Code ne transmet ces quotas que pour les abonnements Pro et Max.
 - **Environnements** : la ligne de statut est une fonctionnalité de Claude Code en terminal. Selon l'environnement (extension d'IDE, par exemple), elle peut ne pas s'exécuter.
 
+## Résolution de problèmes
+
+### `'claude' n'est pas reconnu en tant que commande interne ou externe`
+
+L'extension VS Code et l'application de bureau utilisent leur propre copie de Claude Code : elles n'installent pas la commande `claude` dans le terminal. Deux causes sont possibles.
+
+- **Claude Code n'est pas installé en ligne de commande** : installez-le depuis PowerShell (invite `PS C:\`), puis ouvrez un nouveau terminal :
+  ```powershell
+  irm https://claude.ai/install.ps1 | iex
+  ```
+- **Claude Code est installé, mais son dossier n'est pas dans le PATH** : c'est le cas si `%USERPROFILE%\.local\bin\claude.exe` existe. Ajoutez ce dossier au PATH utilisateur : *Paramètres > Système > Informations système > Paramètres avancés du système > Variables d'environnement*, puis sélectionnez `Path` dans les variables utilisateur, cliquez sur *Modifier > Nouveau* et saisissez `%USERPROFILE%\.local\bin`.
+
+Les terminaux déjà ouverts gardent l'ancien PATH : fermez-les, puis ouvrez-en un nouveau. Pour le terminal intégré de VS Code, fermez **complètement** VS Code (toutes les fenêtres), puis relancez-le. Vérifiez ensuite avec `claude --version`.
+
+En attendant, vous pouvez lancer Claude Code avec son chemin complet : `%USERPROFILE%\.local\bin\claude.exe`.
+
+### Le widget reste sur « En attente de Claude Code »
+
+- **Vous utilisez Claude Code dans l'extension VS Code ou l'application de bureau** : la ligne de statut n'y est pas exécutée, et le widget ne reçoit donc aucune donnée. Lancez `claude` dans un terminal (le terminal intégré de VS Code convient).
+- **Aucune réponse reçue depuis le lancement** : Claude Code ne transmet les quotas qu'après la première réponse d'une session. Envoyez un message et attendez la réponse.
+- **Claude Code n'a pas été redémarré** après la modification de `settings.json`.
+- **Le chemin de l'exe est incorrect** : l'exe a été déplacé, ou la commande pointe vers un dossier de compilation (`dist\`) remplacé à chaque compilation. Placez l'exe à un emplacement stable, puis mettez à jour le chemin (clic droit > *Configuration…* fournit le bloc à jour).
+
+Pour vérifier, ouvrez clic droit > *Configuration…* > **Vérifier**, qui affiche l'heure des dernières données reçues. `claude doctor` signale aussi les erreurs dans `settings.json`.
+
+### Une ligne de statut est déjà configurée dans `settings.json`
+
+Claude Code n'accepte qu'**une seule** clé `statusLine`. Si vous ajoutez le bloc du widget sous une ligne de statut existante, le fichier contient deux clés `statusLine`, et seule la dernière est prise en compte : l'ancienne ligne de statut disparaît sans message d'erreur.
+
+Pour conserver les deux, remplacez-les par une seule commande qui transmet les données au widget, puis à votre ligne de statut existante :
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "input=$(cat); printf '%s' \"$input\" | \"C:/Users/<vous>/AppData/Local/Programs/ClaudeUsageWidget/ClaudeUsageWidget.exe\" --statusline >/dev/null 2>&1; printf '%s' \"$input\" | { <commande existante>; }"
+}
+```
+
+- Remplacez `<commande existante>` par la valeur de `command` de votre ligne de statut actuelle, en gardant ses guillemets échappés (`\"`).
+- Conservez les autres options de l'ancien bloc, par exemple `refreshInterval`.
+- Cette syntaxe suppose que Claude Code exécute la commande avec Git Bash, ce qui est le cas lorsque Git for Windows est installé.
+
+Pensez à sauvegarder `settings.json` avant de le modifier.
+
 ## Structure
 
 ```
