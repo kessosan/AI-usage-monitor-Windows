@@ -27,7 +27,19 @@ namespace ClaudeUsageWidget
             bool createdNew;
             using (var mutex = new Mutex(true, "ClaudeUsageWidget_SingleInstance", out createdNew))
             {
-                if (!createdNew) return 0;
+                if (!createdNew)
+                {
+                    // Relancé après installation : attendre que l'ancienne instance se ferme.
+                    if (Array.IndexOf(args, SelfInstall.ReplaceArgument) < 0) return 0;
+                    try
+                    {
+                        if (!mutex.WaitOne(15000)) return 0;
+                    }
+                    catch (AbandonedMutexException)
+                    {
+                        // L'ancienne instance s'est terminée sans libérer le verrou : il nous revient.
+                    }
+                }
 
                 SetProcessDPIAware();
                 Application.EnableVisualStyles();

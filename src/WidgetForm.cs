@@ -92,12 +92,12 @@ namespace ClaudeUsageWidget
         string status;
         string lastReadPath;
         DateTime lastFileStamp = DateTime.MinValue;
-        bool quitting, initialVisibilityApplied, dragging;
+        bool quitting, initialVisibilityApplied, dragging, dragMoved;
         ConfigForm configForm;
         Point dragOrigin;
         string trayIconKey;
 
-        ToolStripMenuItem miShow, miCompact, miTopMost, miStartup;
+        ToolStripMenuItem miShow, miCompact, miTopMost, miStartup, miLaunch, miLaunchOnStart;
         readonly List<ToolStripMenuItem> miTheme = new List<ToolStripMenuItem>();
         readonly List<ToolStripMenuItem> miOpacity = new List<ToolStripMenuItem>();
 
@@ -163,6 +163,43 @@ namespace ClaudeUsageWidget
             ApplyWindowFrame();
             tickTimer.Start();
             RefreshData(true);
+            BeginInvoke((MethodInvoker)StartupFlow);
+        }
+
+        /// <summary>
+        /// Au démarrage : assistant de mise en route si la ligne de statut n'est pas connectée,
+        /// sinon lancement de Claude Code s'il n'est pas déjà ouvert (option activée par défaut).
+        /// </summary>
+        void StartupFlow()
+        {
+            StatusLineInfo statusLine = StatusLineSetup.Inspect(SelfInstall.InstalledExe);
+            bool needsSetup = statusLine.State != StatusLineState.Connected || SelfInstall.InstalledCopyIsOlder();
+            if (needsSetup && settings.ShowAssistantOnStart)
+            {
+                OpenConfig();
+                return;
+            }
+            if (settings.LaunchClaudeOnStart) LaunchClaude(true);
+        }
+
+        /// <summary>Ouvre Claude Code dans un terminal. Si onlyIfClosed, ne fait rien quand il tourne déjà.</summary>
+        void LaunchClaude(bool onlyIfClosed)
+        {
+            string cli = ClaudeCli.Find();
+            if (cli == null)
+            {
+                if (!onlyIfClosed) OpenConfig(); // l'assistant indique comment l'installer
+                return;
+            }
+            if (onlyIfClosed && ClaudeCli.IsRunning(cli)) return;
+            try
+            {
+                ClaudeCli.Launch(cli, settings.ClaudeWorkDirOrDefault);
+            }
+            catch (Exception ex)
+            {
+                if (!onlyIfClosed) MessageBox.Show(L.F("LaunchFailed", ex.Message), Title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         protected override void SetVisibleCore(bool value)
@@ -337,6 +374,7 @@ namespace ClaudeUsageWidget
             base.OnMouseDown(e);
             if (e.Button != MouseButtons.Left) return;
             dragging = true;
+            dragMoved = false;
             dragOrigin = e.Location;
         }
 
@@ -352,6 +390,7 @@ namespace ClaudeUsageWidget
             if (Math.Abs(wa.Right - (p.X + Width)) < snap) p.X = wa.Right - Width;
             if (Math.Abs(p.Y - wa.Top) < snap) p.Y = wa.Top;
             if (Math.Abs(wa.Bottom - (p.Y + Height)) < snap) p.Y = wa.Bottom - Height;
+            if (p != Location) dragMoved = true;
             Location = p;
         }
 
@@ -360,7 +399,10 @@ namespace ClaudeUsageWidget
             base.OnMouseUp(e);
             if (!dragging) return;
             dragging = false;
-            SaveSettings();
+            if (dragMoved)
+                SaveSettings();
+            else if (windows == null && e.Button == MouseButtons.Left)
+                OpenConfig(); // clic sur « En attente de Claude Code : cliquez ici »
         }
 
         protected override void OnMouseDoubleClick(MouseEventArgs e)
@@ -418,6 +460,7 @@ namespace ClaudeUsageWidget
                 configForm.Activate();
                 return;
             }
+            bool restart;
             using (configForm = new ConfigForm(settings))
             {
                 configForm.TopMost = settings.TopMost;
@@ -426,8 +469,17 @@ namespace ClaudeUsageWidget
                     SaveSettings();
                     RefreshData(true);
                 }
+                restart = configForm.RestartRequested;
             }
             configForm = null;
+
+            if (restart)
+            {
+                // Le widget vient d'être installé : la copie installée prend le relais.
+                SelfInstall.StartInstalled();
+                quitting = true;
+                Close();
+            }
         }
 
         void OnTick()
@@ -776,6 +828,12 @@ namespace ClaudeUsageWidget
             miShow = new ToolStripMenuItem(L.T("MenuShow"), null, delegate { ToggleVisible(); });
             var miRefresh = new ToolStripMenuItem(L.T("MenuRefresh"), null, delegate { RefreshData(true); });
             var miConfig = new ToolStripMenuItem(L.T("MenuSettings"), null, delegate { OpenConfig(); });
+            miLaunch = new ToolStripMenuItem(L.T("LaunchClaude"), null, delegate { LaunchClaude(false); });
+            miLaunchOnStart = new ToolStripMenuItem(L.T("MenuLaunchOnStart"), null, delegate
+            {
+                settings.LaunchClaudeOnStart = !settings.LaunchClaudeOnStart;
+                SaveSettings();
+            });
             miCompact = new ToolStripMenuItem(L.T("MenuCompact"), null, delegate { ToggleCompact(); });
             miTopMost = new ToolStripMenuItem(L.T("MenuTopMost"), null, delegate
             {
@@ -827,8 +885,8 @@ namespace ClaudeUsageWidget
 
             m.Items.AddRange(new ToolStripItem[]
             {
-                miShow, miRefresh, new ToolStripSeparator(),
-                miConfig, miCompact, miTopMost, themeMenu, opacityMenu, miStartup,
+                miShow, miRefresh, miLaunch, new ToolStripSeparator(),
+                miConfig, miCompact, miTopMost, themeMenu, opacityMenu, miStartup, miLaunchOnStart,
                 new ToolStripSeparator(), miQuit,
             });
 
@@ -838,7 +896,9 @@ namespace ClaudeUsageWidget
                 miCompact.Checked = settings.Compact;
                 miTopMost.Checked = settings.TopMost;
                 foreach (ToolStripMenuItem item in miTheme) item.Checked = (string)item.Tag == settings.Theme;
-                foreach (ToolStripMenuItem item in miOpacity) item.Checked = (int)item.Tag == settings.OpacityPercent;                try { miStartup.Checked = Startup.IsEnabled(); }
+                foreach (ToolStripMenuItem item in miOpacity) item.Checked = (int)item.Tag == settings.OpacityPercent;
+                miLaunchOnStart.Checked = settings.LaunchClaudeOnStart;
+                try { miStartup.Checked = Startup.IsEnabled(); }
                 catch (Exception) { miStartup.Checked = false; }
             };
             return m;

@@ -21,6 +21,9 @@ namespace ClaudeUsageWidget
         public int OpacityPercent = 100;
         public string Theme = ThemeDark;
         public string CustomDataPath = "";   // vide : emplacement par défaut
+        public bool LaunchClaudeOnStart = true;
+        public string ClaudeWorkDir = "";    // vide : dossier de l'utilisateur
+        public bool ShowAssistantOnStart = true;
 
         public static string AppDataDir
         {
@@ -30,6 +33,12 @@ namespace ClaudeUsageWidget
         static string FilePath
         {
             get { return Path.Combine(AppDataDir, "settings.ini"); }
+        }
+
+        /// <summary>Dossier dans lequel Claude Code est lancé.</summary>
+        public string ClaudeWorkDirOrDefault
+        {
+            get { return string.IsNullOrEmpty(ClaudeWorkDir) ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) : ClaudeWorkDir; }
         }
 
         /// <summary>Fichier de données alimenté par la ligne de statut de Claude Code.</summary>
@@ -62,6 +71,9 @@ namespace ClaudeUsageWidget
                             if (val == ThemeDark || val == ThemeLight || val == ThemeSystem) s.Theme = val;
                             break;
                         case "DataPath": s.CustomDataPath = val; break;
+                        case "LaunchClaudeOnStart": s.LaunchClaudeOnStart = val == "1"; break;
+                        case "ClaudeWorkDir": s.ClaudeWorkDir = val; break;
+                        case "ShowAssistantOnStart": s.ShowAssistantOnStart = val == "1"; break;
                     }
                 }
             }
@@ -87,6 +99,9 @@ namespace ClaudeUsageWidget
                     "OpacityPercent=" + OpacityPercent,
                     "Theme=" + Theme,
                     "DataPath=" + CustomDataPath,
+                    "LaunchClaudeOnStart=" + (LaunchClaudeOnStart ? 1 : 0),
+                    "ClaudeWorkDir=" + ClaudeWorkDir,
+                    "ShowAssistantOnStart=" + (ShowAssistantOnStart ? 1 : 0),
                 });
             }
             catch (Exception)
@@ -116,10 +131,15 @@ namespace ClaudeUsageWidget
 
         public static void Set(bool enabled)
         {
+            Set(enabled, Application.ExecutablePath);
+        }
+
+        public static void Set(bool enabled, string exePath)
+        {
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey))
             {
                 if (enabled)
-                    key.SetValue(ValueName, "\"" + Application.ExecutablePath + "\"");
+                    key.SetValue(ValueName, "\"" + exePath + "\"");
                 else
                     key.DeleteValue(ValueName, false);
             }

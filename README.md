@@ -14,16 +14,48 @@ Le widget **n'utilise aucun identifiant et n'accède pas au réseau**. Il affich
 
 ## Installation
 
-### Télécharger l'exécutable
+### Prérequis
+
+- Un abonnement claude.ai **Pro ou Max**.
+- **Claude Code en ligne de commande** (commande `claude`). L'extension VS Code et l'application de bureau ne suffisent pas : voir [Résolution de problèmes](#résolution-de-problèmes) pour l'installer.
+- [Git for Windows](https://git-scm.com/downloads/win), uniquement si vous utilisez déjà une autre ligne de statut dans Claude Code.
+
+### Télécharger et lancer
 
 1. Ouvrez la page **Releases** du dépôt et téléchargez `ClaudeUsageWidget.exe` depuis la dernière version.
 2. *(Facultatif)* Vérifiez l'intégrité du fichier : l'empreinte affichée par la commande ci-dessous doit correspondre à celle de `SHA256SUMS.txt`.
    ```powershell
    Get-FileHash .\ClaudeUsageWidget.exe -Algorithm SHA256
    ```
-3. Placez l'exe à un emplacement définitif (par exemple `%LOCALAPPDATA%\Programs\ClaudeUsageWidget\`), puis lancez-le. Aucune installation n'est nécessaire. L'emplacement doit rester stable, car la configuration de Claude Code y fait référence.
+3. Lancez l'exe, depuis le dossier de téléchargement par exemple. L'assistant de mise en route s'ouvre (voir ci-dessous).
 
 L'exécutable n'est pas signé numériquement. Au premier lancement, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » : cliquez sur *Informations complémentaires*, puis *Exécuter quand même*.
+
+### Mise en route
+
+Au premier lancement, la fenêtre **Mise en route** vérifie trois étapes et propose l'action correspondante :
+
+| Étape | Vérification | Action |
+|---|---|---|
+| **Claude Code (ligne de commande)** | La commande `claude` est installée | *Installer…* ouvre la page d'installation |
+| **Ligne de statut** | Claude Code transmet ses quotas au widget | *Connecter* configure Claude Code automatiquement |
+| **Données d'utilisation** | Des quotas ont été reçus | *Lancer Claude Code* ouvre un terminal |
+
+**Connecter** fait, après confirmation :
+
+- **installation du widget** : copie de l'exe dans `%LOCALAPPDATA%\Programs\ClaudeUsageWidget\`, puis redémarrage depuis cet emplacement stable ;
+- **configuration de Claude Code** : ajout de la commande du widget à la ligne de statut, dans `%USERPROFILE%\.claude\settings.json`. Une copie de sauvegarde du fichier est créée avant chaque modification ;
+- **ligne de statut existante** (par exemple un autre outil d'affichage) : elle est **conservée**, et les deux fonctionnent.
+
+Il suffit ensuite d'envoyer un message dans Claude Code : les pourcentages s'affichent après la réponse. Les sessions Claude Code déjà ouvertes doivent être redémarrées pour prendre en compte la connexion.
+
+**Déconnecter** retire la commande du widget et restaure la ligne de statut d'origine.
+
+Par défaut, le widget **lance Claude Code à son démarrage**, dans un terminal (Windows Terminal, ou l'invite de commandes à défaut), s'il n'est pas déjà ouvert. Cette option et le dossier de travail se règlent dans la même fenêtre (clic droit > *Configuration…*).
+
+### Mettre à jour le widget
+
+Quittez le widget (clic droit > *Quitter*), téléchargez la nouvelle version et lancez-la. L'assistant détecte que la copie installée est plus ancienne et propose **Mettre à jour**.
 
 ### Compiler depuis les sources
 
@@ -34,26 +66,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 .\dist\ClaudeUsageWidget.exe
 ```
 
-### Brancher Claude Code
-
-Prérequis : Claude Code, connecté avec un abonnement claude.ai **Pro ou Max**.
-
-Clic droit sur le widget > **Configuration…** : la fenêtre fournit le bloc prêt à copier.
-
-Ajoutez ce bloc dans `%USERPROFILE%\.claude\settings.json`, en adaptant le chemin de l'exe, puis redémarrez Claude Code :
-
-```json
-"statusLine": {
-  "type": "command",
-  "command": "\"C:/Users/<vous>/AppData/Local/Programs/ClaudeUsageWidget/ClaudeUsageWidget.exe\" --statusline"
-}
-```
-
-Claude Code appelle alors l'exe à chaque mise à jour de sa ligne de statut. L'exe enregistre les quotas, puis affiche un résumé court (`[Opus 5] | 5h 24% | 7j 41%`).
-
-**Vous utilisez déjà une autre ligne de statut ?** Elle peut écrire elle-même le fichier de données (format ci-dessous).
-
-Conseils :
+### Conseils
 
 - **Afficher l'icône en permanence** : Windows 11 range les nouvelles icônes dans le menu masqué (chevron `^`). Glissez-la dans la barre des tâches, ou activez-la dans *Paramètres > Personnalisation > Barre des tâches > Autres icônes de la barre d'état système*.
 - **Démarrage automatique** : clic droit > *Lancer au démarrage de Windows*.
@@ -64,8 +77,9 @@ Conseils :
 |---|---|
 | Glisser la fenêtre | Déplacer (position mémorisée) |
 | Double-clic sur la fenêtre | Basculer entre le mode complet et le mode compact |
+| Clic sur « En attente de Claude Code » | Ouvrir la fenêtre de mise en route |
 | Clic gauche sur l'icône de notification | Afficher / masquer le widget |
-| Clic droit (fenêtre ou icône) | Menu : actualiser, configuration, compact, premier plan, thème, opacité, démarrage, quitter |
+| Clic droit (fenêtre ou icône) | Menu : actualiser, lancer Claude Code, configuration, compact, premier plan, thème, opacité, démarrage avec Windows, lancement de Claude Code au démarrage, quitter |
 | Alt+F4 sur le widget | Masque la fenêtre sans quitter l'application |
 
 L'en-tête indique l'heure des dernières données reçues (« maj 14:05 »).
@@ -82,7 +96,7 @@ Pour ajouter une langue, créez un dictionnaire de traductions dans `src/Localiz
 ## Fonctionnement
 
 1. Après chaque réponse, Claude Code transmet à la commande de ligne de statut un JSON qui contient `rate_limits.five_hour` et `rate_limits.seven_day` (pourcentage utilisé et heure de remise à zéro).
-2. La commande de ligne de statut (`ClaudeUsageWidget.exe --statusline`) enregistre ces valeurs dans `%APPDATA%\ClaudeUsageWidget\usage.json`. Si rien n'a changé, le fichier n'est réécrit qu'une fois toutes les 30 secondes au plus.
+2. La commande de ligne de statut (`ClaudeUsageWidget.exe --statusline`, ajoutée par *Connecter*) enregistre ces valeurs dans `%APPDATA%\ClaudeUsageWidget\usage.json`, puis affiche un résumé court dans Claude Code (`[Opus 5] | 5h 24% | 7j 41%`). Si rien n'a changé, le fichier n'est réécrit qu'une fois toutes les 30 secondes au plus.
 3. Le widget vérifie ce fichier toutes les 5 secondes et se met à jour dès qu'il change.
 
 Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
@@ -99,8 +113,10 @@ Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
 
 - **Aucun accès au compte :** le widget ne lit, ne stocke et ne transmet aucun identifiant, mot de passe ou jeton. Il ne fait aucune requête réseau.
 - **Fichiers locaux uniquement :** tout est enregistré sur votre poste, hors du dossier du projet, dans `%APPDATA%\ClaudeUsageWidget\` :
-  - `settings.ini` : position, apparence et emplacement du fichier de données ;
-  - `usage.json` : derniers pourcentages et heures de remise à zéro.
+  - `settings.ini` : position, apparence, options de lancement et emplacement du fichier de données ;
+  - `usage.json` : derniers pourcentages et heures de remise à zéro ;
+  - `statusline-original.json` : votre ligne de statut d'origine, si elle a été conservée à la connexion, pour pouvoir la restaurer.
+- **Configuration de Claude Code :** le widget ne modifie `settings.json` que lorsque vous cliquez sur *Connecter*, *Mettre à jour* ou *Déconnecter*, et seule la clé `statusLine` change. Les autres réglages sont conservés, dans le même ordre, avec une indentation normalisée à deux espaces. Une sauvegarde `settings.json.bak-usage-widget-<date>` est créée avant chaque modification.
 
 ### Limites connues
 
@@ -128,16 +144,16 @@ En attendant, vous pouvez lancer Claude Code avec son chemin complet : `%USERPRO
 
 - **Vous utilisez Claude Code dans l'extension VS Code ou l'application de bureau** : la ligne de statut n'y est pas exécutée, et le widget ne reçoit donc aucune donnée. Lancez `claude` dans un terminal (le terminal intégré de VS Code convient).
 - **Aucune réponse reçue depuis le lancement** : Claude Code ne transmet les quotas qu'après la première réponse d'une session. Envoyez un message et attendez la réponse.
-- **Claude Code n'a pas été redémarré** après la modification de `settings.json`.
-- **Le chemin de l'exe est incorrect** : l'exe a été déplacé, ou la commande pointe vers un dossier de compilation (`dist\`) remplacé à chaque compilation. Placez l'exe à un emplacement stable, puis mettez à jour le chemin (clic droit > *Configuration…* fournit le bloc à jour).
+- **Claude Code n'a pas été redémarré** après la connexion de la ligne de statut.
+- **La ligne de statut n'est pas connectée, ou pointe vers une autre copie de l'exe** : cliquez sur le message du widget (ou clic droit > *Configuration…*), puis sur *Connecter* ou *Mettre à jour*.
 
-Pour vérifier, ouvrez clic droit > *Configuration…* > **Vérifier**, qui affiche l'heure des dernières données reçues. `claude doctor` signale aussi les erreurs dans `settings.json`.
+La fenêtre de mise en route indique l'état de chaque étape et l'heure des dernières données reçues. `claude doctor` signale aussi les erreurs dans `settings.json`.
 
-### Une ligne de statut est déjà configurée dans `settings.json`
+### Configuration manuelle de la ligne de statut
 
-Claude Code n'accepte qu'**une seule** clé `statusLine`. Si vous ajoutez le bloc du widget sous une ligne de statut existante, le fichier contient deux clés `statusLine`, et seule la dernière est prise en compte : l'ancienne ligne de statut disparaît sans message d'erreur.
+*Connecter* configure la ligne de statut automatiquement. Si vous préférez modifier `settings.json` vous-même, retenez que Claude Code n'accepte qu'**une seule** clé `statusLine`. Si vous ajoutez le bloc du widget sous une ligne de statut existante, le fichier contient deux clés `statusLine`, et seule la dernière est prise en compte : l'ancienne ligne de statut disparaît sans message d'erreur. *Connecter* corrige d'ailleurs ce cas en fusionnant les deux.
 
-Pour conserver les deux, remplacez-les par une seule commande qui transmet les données au widget, puis à votre ligne de statut existante :
+Sans autre ligne de statut, le bloc à ajouter est fourni dans *Configuration… > Avancé*. Pour conserver une ligne de statut existante, utilisez une seule commande qui transmet les données au widget, puis à votre ligne de statut :
 
 ```json
 "statusLine": {
@@ -157,10 +173,12 @@ Pensez à sauvegarder `settings.json` avant de le modifier.
 ```
 src/
   Program.cs       point d'entrée, instance unique, mode --statusline
+  ClaudeCode.cs    détection et lancement de Claude Code, connexion de la ligne de statut, installation
+  MiniJson.cs      lecture et écriture de settings.json en conservant l'ordre des clés
   Localization.cs  textes traduits (français, anglais) et formats régionaux
   UsageStore.cs    lecture et écriture du fichier de données, pont de ligne de statut
   Settings.cs      préférences .ini, lancement au démarrage (registre HKCU)
-  ConfigForm.cs    fenêtre de configuration (fichier de données, branchement de Claude Code)
+  ConfigForm.cs    fenêtre de mise en route et de configuration
   WidgetForm.cs    fenêtre, dessin, thèmes, icône de notification, menu
 build.ps1          compilation avec csc.exe (paramètre -Version)
 ```
