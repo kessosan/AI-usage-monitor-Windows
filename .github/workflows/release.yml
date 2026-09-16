@@ -17,7 +17,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Récupérer les sources
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Déterminer la version
         id: version
@@ -40,7 +40,7 @@ jobs:
 
       - name: Publier l'artefact (lancement manuel)
         if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ClaudeUsageWidget-${{ steps.version.outputs.version }}
           path: |
