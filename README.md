@@ -163,5 +163,4 @@ src/
   ConfigForm.cs    fenêtre de configuration (fichier de données, branchement de Claude Code)
   WidgetForm.cs    fenêtre, dessin, thèmes, icône de notification, menu
 build.ps1          compilation avec csc.exe (paramètre -Version)
-.github/workflows/release.yml   compilation automatique et publication des Releases
 ```
