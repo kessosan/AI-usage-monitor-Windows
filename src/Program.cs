@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Claude Usage Widget")]
 [assembly: AssemblyProduct("Claude Usage Widget")]
-[assembly: AssemblyVersion("1.0.0.0")]
+// La version est injectée par build.ps1 (obj/VersionInfo.cs).
 
 namespace ClaudeUsageWidget
 {

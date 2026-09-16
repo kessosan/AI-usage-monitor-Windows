@@ -13,6 +13,19 @@ Deux affichages :
 
 ## Installation
 
+### Télécharger l'exécutable
+
+1. Ouvrez la page **Releases** du dépôt et téléchargez `ClaudeUsageWidget.exe` depuis la dernière version.
+2. *(Facultatif)* Vérifiez l'intégrité du fichier : l'empreinte affichée par la commande ci-dessous doit correspondre à celle de `SHA256SUMS.txt`.
+   ```powershell
+   Get-FileHash .\ClaudeUsageWidget.exe -Algorithm SHA256
+   ```
+3. Placez l'exe où vous voulez (par exemple `%LOCALAPPDATA%\Programs\ClaudeUsageWidget\`) et lancez-le. Aucune installation n'est nécessaire.
+
+L'exécutable n'est pas signé numériquement. Au premier lancement, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » : cliquez sur *Informations complémentaires*, puis *Exécuter quand même*.
+
+### Compiler depuis les sources
+
 Aucun SDK n'est nécessaire : la compilation utilise le compilateur C# inclus dans Windows (.NET Framework 4.8).
 
 ```powershell
@@ -20,7 +33,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 .\dist\ClaudeUsageWidget.exe
 ```
 
-Prérequis : être connecté à **Claude Code** avec votre compte claude.ai (`claude /login`). Sinon, indiquez un jeton ou un fichier d'identifiants dans la configuration (voir plus bas).
+### Prérequis
+
+Être connecté à **Claude Code** avec votre compte claude.ai (`claude /login`). Sinon, indiquez un jeton ou un fichier d'identifiants dans la configuration (voir plus bas).
 
 Conseils :
 
@@ -91,5 +106,19 @@ src/
   Settings.cs      préférences .ini, jeton chiffré (DPAPI), lancement au démarrage (registre HKCU)
   ConfigForm.cs    fenêtre de configuration de l'accès au compte
   WidgetForm.cs    fenêtre, dessin, thèmes, icône de notification, menu
-build.ps1          compilation avec csc.exe
+build.ps1          compilation avec csc.exe (paramètre -Version)
+.github/workflows/release.yml   compilation automatique et publication des Releases
 ```
+
+## Publier une nouvelle version
+
+La compilation et la publication sont automatisées par GitHub Actions :
+
+```powershell
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+Le workflow compile l'exe sur un runner Windows avec ce numéro de version, calcule son empreinte SHA-256, puis crée la Release avec les deux fichiers et des notes générées à partir des commits. Un tag contenant un tiret (par exemple `v1.1.0-beta.1`) est publié comme préversion.
+
+Pour compiler sans rien publier, lancez le workflow manuellement (onglet *Actions* > *Build et Release* > *Run workflow*). L'exe est alors disponible en artefact du workflow.

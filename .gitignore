@@ -1,5 +1,6 @@
 # Binaires compilés
 dist/
+obj/
 *.exe
 *.pdb
 

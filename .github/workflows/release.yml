@@ -1,0 +1,60 @@
+# Compile le widget sur un runner Windows GitHub.
+# - Push d'un tag vX.Y.Z  : crée la Release avec l'exe et son empreinte SHA-256.
+# - Lancement manuel      : compile seulement et fournit l'exe en artefact du workflow (aucune Release).
+name: Build et Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v5
+
+      - name: Déterminer la version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $v = $env:GITHUB_REF_NAME } else { $v = "0.0.0-ci.$env:GITHUB_RUN_NUMBER" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Compiler
+        shell: powershell
+        run: .\build.ps1 -Version '${{ steps.version.outputs.version }}'
+
+      - name: Préparer les fichiers
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist/ClaudeUsageWidget.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ClaudeUsageWidget.exe" | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          Get-Content dist/SHA256SUMS.txt
+          (Get-Item dist/ClaudeUsageWidget.exe).VersionInfo | Format-List ProductVersion, FileVersion
+
+      - name: Publier l'artefact (lancement manuel)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeUsageWidget-${{ steps.version.outputs.version }}
+          path: |
+            dist/ClaudeUsageWidget.exe
+            dist/SHA256SUMS.txt
+
+      - name: Créer la Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $ghArgs = @('release', 'create', $tag, 'dist/ClaudeUsageWidget.exe', 'dist/SHA256SUMS.txt',
+                    '--title', "Utilisation Claude $tag", '--generate-notes', '--verify-tag')
+          if ($tag -match '-') { $ghArgs += '--prerelease' }
+          gh @ghArgs
