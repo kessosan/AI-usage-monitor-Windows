@@ -28,6 +28,11 @@ jobs:
 
       - name: Compiler
         shell: powershell
+        env:
+          # Informations « À propos », définies dans les variables du dépôt (Settings > Secrets and variables > Actions)
+          WIDGET_AUTHOR: ${{ vars.WIDGET_AUTHOR }}
+          WIDGET_EMAIL: ${{ vars.WIDGET_EMAIL }}
+          WIDGET_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
         run: .\build.ps1 -Version '${{ steps.version.outputs.version }}'
 
       - name: Préparer les fichiers

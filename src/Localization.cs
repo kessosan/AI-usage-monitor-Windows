@@ -126,6 +126,35 @@ namespace ClaudeUsageWidget
             { "ActionFailed", "The operation failed: {0}" },
             { "LaunchFailed", "Unable to launch Claude Code: {0}" },
             { "MenuLaunchOnStart", "Launch Claude Code at startup" },
+
+            // À propos
+            { "MenuAbout", "About…" },
+            { "AboutTitle", "About" },
+            { "AboutVersion", "Version {0}" },
+            { "AboutDescription", "Shows your Claude subscription usage (5-hour session and week) and reset times, from the data Claude Code passes to its status line." },
+            { "AboutAuthor", "Author: {0}" },
+            { "AboutRepository", "Source code" },
+            { "AboutDisclaimer", "Independent tool, not affiliated with or endorsed by Anthropic." },
+            { "Close", "Close" },
+
+            // Désinstallation
+            { "MenuUninstall", "Uninstall…" },
+            { "UninstallTitle", "Uninstall Claude usage" },
+            { "UninstallIntro", "The following steps will be carried out:" },
+            { "UninstallStepStatusLine", "• Disconnect the Claude Code status line and restore the original one, if any" },
+            { "UninstallStepStartup", "• Remove the start with Windows entry" },
+            { "UninstallStepFiles", "• Delete the installed copy ({0}) and its entry in Installed apps" },
+            { "UninstallRemoveData", "Also delete my settings and usage data:" },
+            { "UninstallKeepBackups", "Backup copies of settings.json are kept." },
+            { "UninstallButton", "Uninstall" },
+            { "UninstallDone", "Claude usage has been uninstalled." },
+            { "UninstallDoneRestart", "Restart the Claude Code sessions that are open so they stop calling the widget." },
+            { "UninstallDoneDownloaded", "You can also delete the file you launched:\n{0}" },
+            { "UninstallErrors", "Some steps failed:\n{0}" },
+            { "UninstallErrStatusLine", "status line: {0}" },
+            { "UninstallErrRegistry", "Windows registry: {0}" },
+            { "UninstallErrData", "settings and data: {0}" },
+            { "UninstallErrFiles", "installed copy: {0}" },
         };
 
         static readonly Dictionary<string, string> French = new Dictionary<string, string>
@@ -240,6 +269,35 @@ namespace ClaudeUsageWidget
             { "ActionFailed", "L'opération a échoué : {0}" },
             { "LaunchFailed", "Impossible de lancer Claude Code : {0}" },
             { "MenuLaunchOnStart", "Lancer Claude Code au démarrage" },
+
+            // À propos
+            { "MenuAbout", "À propos…" },
+            { "AboutTitle", "À propos" },
+            { "AboutVersion", "Version {0}" },
+            { "AboutDescription", "Affiche l'utilisation de votre abonnement Claude (session de 5 h et semaine) et les heures de remise à zéro, à partir des données que Claude Code transmet à sa ligne de statut." },
+            { "AboutAuthor", "Auteur : {0}" },
+            { "AboutRepository", "Code source" },
+            { "AboutDisclaimer", "Outil indépendant, non affilié à Anthropic et non approuvé par Anthropic." },
+            { "Close", "Fermer" },
+
+            // Désinstallation
+            { "MenuUninstall", "Désinstaller…" },
+            { "UninstallTitle", "Désinstaller Utilisation Claude" },
+            { "UninstallIntro", "Les opérations suivantes vont être effectuées :" },
+            { "UninstallStepStatusLine", "• Déconnecter la ligne de statut de Claude Code et restaurer celle d'origine, s'il y en avait une" },
+            { "UninstallStepStartup", "• Retirer le lancement au démarrage de Windows" },
+            { "UninstallStepFiles", "• Supprimer la copie installée ({0}) et son entrée dans « Applications installées »" },
+            { "UninstallRemoveData", "Supprimer aussi mes réglages et données d'utilisation :" },
+            { "UninstallKeepBackups", "Les copies de sauvegarde de settings.json sont conservées." },
+            { "UninstallButton", "Désinstaller" },
+            { "UninstallDone", "Utilisation Claude a été désinstallé." },
+            { "UninstallDoneRestart", "Redémarrez les sessions Claude Code ouvertes pour qu'elles n'appellent plus le widget." },
+            { "UninstallDoneDownloaded", "Vous pouvez aussi supprimer le fichier que vous avez lancé :\n{0}" },
+            { "UninstallErrors", "Certaines étapes ont échoué :\n{0}" },
+            { "UninstallErrStatusLine", "ligne de statut : {0}" },
+            { "UninstallErrRegistry", "registre Windows : {0}" },
+            { "UninstallErrData", "réglages et données : {0}" },
+            { "UninstallErrFiles", "copie installée : {0}" },
         };
 
         /// <summary>Traductions disponibles, par code de langue ISO 639-1.</summary>

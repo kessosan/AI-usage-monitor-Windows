@@ -25,9 +25,28 @@ namespace ClaudeUsageWidget
         public string ClaudeWorkDir = "";    // vide : dossier de l'utilisateur
         public bool ShowAssistantOnStart = true;
 
+        /// <summary>
+        /// Réservé aux tests : si la variable CLAUDE_USAGE_WIDGET_ROOT est définie, les dossiers du widget
+        /// y sont redirigés et les clés de registre portent le suffixe « -Test ».
+        /// </summary>
+        public static string TestRoot
+        {
+            get { return Environment.GetEnvironmentVariable("CLAUDE_USAGE_WIDGET_ROOT"); }
+        }
+
+        public static string TestSuffix
+        {
+            get { return string.IsNullOrEmpty(TestRoot) ? "" : "-Test"; }
+        }
+
         public static string AppDataDir
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClaudeUsageWidget"); }
+            get
+            {
+                return string.IsNullOrEmpty(TestRoot)
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClaudeUsageWidget")
+                    : Path.Combine(TestRoot, "AppData");
+            }
         }
 
         static string FilePath
@@ -121,7 +140,10 @@ namespace ClaudeUsageWidget
     static class Startup
     {
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string ValueName = "ClaudeUsageWidget";
+        static string ValueName
+        {
+            get { return "ClaudeUsageWidget" + Settings.TestSuffix; }
+        }
 
         public static bool IsEnabled()
         {

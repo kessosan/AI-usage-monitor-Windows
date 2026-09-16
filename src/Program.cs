@@ -24,6 +24,17 @@ namespace ClaudeUsageWidget
             if (args.Length > 0 && args[0] == StatusLineArgument)
                 return StatusLineBridge.Run();
 
+            // Désinstallation lancée depuis « Applications installées » de Windows.
+            if (Array.IndexOf(args, Uninstaller.Argument) >= 0)
+            {
+                SetProcessDPIAware();
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                using (var form = new UninstallForm())
+                    form.ShowDialog();
+                return 0;
+            }
+
             bool createdNew;
             using (var mutex = new Mutex(true, "ClaudeUsageWidget_SingleInstance", out createdNew))
             {

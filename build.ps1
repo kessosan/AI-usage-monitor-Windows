@@ -3,7 +3,11 @@
 #   powershell -ExecutionPolicy Bypass -File .\build.ps1                    (version de développement 0.0.0)
 #   powershell -ExecutionPolicy Bypass -File .\build.ps1 -Version v1.2.0    (version publiée, « v » facultatif)
 param(
-    [string]$Version = '0.0.0'
+    [string]$Version = '0.0.0',
+    # Informations affichées dans « À propos » : jamais écrites dans le code source.
+    [string]$Author = $env:WIDGET_AUTHOR,
+    [string]$Email = $env:WIDGET_EMAIL,
+    [string]$RepositoryUrl = $env:WIDGET_REPOSITORY_URL
 )
 $ErrorActionPreference = 'Stop'
 
@@ -20,13 +24,22 @@ $dist = Join-Path $PSScriptRoot 'dist'
 $obj = Join-Path $PSScriptRoot 'obj'
 New-Item -ItemType Directory -Force $dist, $obj | Out-Null
 
-# Métadonnées de version générées à chaque compilation (non versionnées).
+function ConvertTo-CSharpString([string]$value) {
+    '"' + ($value -replace '\\', '\\' -replace '"', '\"') + '"'
+}
+$copyright = if ($Author) { [string][char]0xA9 + " " + (Get-Date).Year + " " + $Author } else { '' }
+
+# Métadonnées générées à chaque compilation (non versionnées).
 $versionInfo = Join-Path $obj 'VersionInfo.cs'
 @"
 using System.Reflection;
 [assembly: AssemblyVersion("$numeric")]
 [assembly: AssemblyFileVersion("$numeric")]
 [assembly: AssemblyInformationalVersion("$Version")]
+[assembly: AssemblyCompany($(ConvertTo-CSharpString $Author))]
+[assembly: AssemblyCopyright($(ConvertTo-CSharpString $copyright))]
+[assembly: AssemblyMetadata("ContactEmail", $(ConvertTo-CSharpString $Email))]
+[assembly: AssemblyMetadata("RepositoryUrl", $(ConvertTo-CSharpString $RepositoryUrl))]
 "@ | Set-Content -Path $versionInfo -Encoding UTF8
 
 $out = Join-Path $dist 'ClaudeUsageWidget.exe'

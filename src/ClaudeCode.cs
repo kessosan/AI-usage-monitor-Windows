@@ -373,7 +373,12 @@ namespace ClaudeUsageWidget
 
         public static string InstallDir
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\ClaudeUsageWidget"); }
+            get
+            {
+                return string.IsNullOrEmpty(Settings.TestRoot)
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\ClaudeUsageWidget")
+                    : Path.Combine(Settings.TestRoot, "Programs");
+            }
         }
 
         public static string InstalledExe
@@ -408,6 +413,7 @@ namespace ClaudeUsageWidget
             Directory.CreateDirectory(InstallDir);
             File.Copy(Application.ExecutablePath, InstalledExe, true);
             if (Startup.IsEnabled()) Startup.Set(true, InstalledExe);
+            Uninstaller.Register();
         }
 
         /// <summary>Lance la copie installée, qui attend la fermeture de l'instance actuelle.</summary>

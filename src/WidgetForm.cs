@@ -92,7 +92,7 @@ namespace ClaudeUsageWidget
         string status;
         string lastReadPath;
         DateTime lastFileStamp = DateTime.MinValue;
-        bool quitting, initialVisibilityApplied, dragging, dragMoved;
+        bool quitting, uninstalled, initialVisibilityApplied, dragging, dragMoved;
         ConfigForm configForm;
         Point dragOrigin;
         string trayIconKey;
@@ -172,6 +172,8 @@ namespace ClaudeUsageWidget
         /// </summary>
         void StartupFlow()
         {
+            if (SelfInstall.IsRunningInstalled) Uninstaller.Register(); // tient à jour la version affichée par Windows
+
             StatusLineInfo statusLine = StatusLineSetup.Inspect(SelfInstall.InstalledExe);
             bool needsSetup = statusLine.State != StatusLineState.Connected || SelfInstall.InstalledCopyIsOlder();
             if (needsSetup && settings.ShowAssistantOnStart)
@@ -224,7 +226,7 @@ namespace ClaudeUsageWidget
                 ToggleVisible();
                 return;
             }
-            SaveSettings();
+            if (!uninstalled) SaveSettings(); // après désinstallation, ne pas recréer le dossier des réglages
             base.OnFormClosing(e);
         }
 
@@ -451,6 +453,27 @@ namespace ClaudeUsageWidget
             }
             Relayout();
             UpdateTray();
+        }
+
+        void ShowAbout()
+        {
+            using (var about = new AboutForm())
+            {
+                about.TopMost = settings.TopMost;
+                about.ShowDialog();
+            }
+        }
+
+        void Uninstall()
+        {
+            using (var form = new UninstallForm())
+            {
+                form.TopMost = settings.TopMost;
+                if (form.ShowDialog() != DialogResult.OK) return;
+            }
+            uninstalled = true;
+            quitting = true;
+            Close();
         }
 
         void OpenConfig()
@@ -877,6 +900,9 @@ namespace ClaudeUsageWidget
                 catch (Exception ex) { MessageBox.Show(ex.Message, Title, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             });
 
+            var miAbout = new ToolStripMenuItem(L.T("MenuAbout"), null, delegate { ShowAbout(); });
+            var miUninstall = new ToolStripMenuItem(L.T("MenuUninstall"), null, delegate { Uninstall(); });
+
             var miQuit = new ToolStripMenuItem(L.T("MenuQuit"), null, delegate
             {
                 quitting = true;
@@ -887,7 +913,7 @@ namespace ClaudeUsageWidget
             {
                 miShow, miRefresh, miLaunch, new ToolStripSeparator(),
                 miConfig, miCompact, miTopMost, themeMenu, opacityMenu, miStartup, miLaunchOnStart,
-                new ToolStripSeparator(), miQuit,
+                new ToolStripSeparator(), miAbout, miUninstall, miQuit,
             });
 
             m.Opening += delegate

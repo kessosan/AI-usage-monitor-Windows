@@ -57,6 +57,21 @@ Par défaut, le widget **lance Claude Code à son démarrage**, dans un terminal
 
 Quittez le widget (clic droit > *Quitter*), téléchargez la nouvelle version et lancez-la. L'assistant détecte que la copie installée est plus ancienne et propose **Mettre à jour**.
 
+### Désinstaller le widget
+
+Deux possibilités :
+
+- **Depuis le widget** : clic droit > *Désinstaller…* ;
+- **Depuis Windows** : *Paramètres > Applications > Applications installées*, entrée « Utilisation Claude » > *Désinstaller*.
+
+Après confirmation, la désinstallation :
+
+1. retire la commande du widget de la ligne de statut de Claude Code et restaure la ligne de statut d'origine s'il y en avait une ;
+2. supprime le lancement au démarrage de Windows et l'entrée dans « Applications installées » ;
+3. supprime la copie installée et, sauf si vous décochez la case, les réglages et données (`%APPDATA%\ClaudeUsageWidget\`).
+
+Les copies de sauvegarde de `settings.json` sont conservées. Redémarrez ensuite les sessions Claude Code ouvertes. Si vous aviez lancé le widget depuis un autre dossier (téléchargements par exemple), supprimez aussi ce fichier.
+
 ### Compiler depuis les sources
 
 Aucun SDK n'est nécessaire : la compilation utilise le compilateur C# inclus dans Windows (.NET Framework 4.8).
@@ -79,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 | Double-clic sur la fenêtre | Basculer entre le mode complet et le mode compact |
 | Clic sur « En attente de Claude Code » | Ouvrir la fenêtre de mise en route |
 | Clic gauche sur l'icône de notification | Afficher / masquer le widget |
-| Clic droit (fenêtre ou icône) | Menu : actualiser, lancer Claude Code, configuration, compact, premier plan, thème, opacité, démarrage avec Windows, lancement de Claude Code au démarrage, quitter |
+| Clic droit (fenêtre ou icône) | Menu : actualiser, lancer Claude Code, configuration, compact, premier plan, thème, opacité, démarrage avec Windows, lancement de Claude Code au démarrage, à propos, désinstaller, quitter |
 | Alt+F4 sur le widget | Masque la fenêtre sans quitter l'application |
 
 L'en-tête indique l'heure des dernières données reçues (« maj 14:05 »).
@@ -116,7 +131,8 @@ Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
   - `settings.ini` : position, apparence, options de lancement et emplacement du fichier de données ;
   - `usage.json` : derniers pourcentages et heures de remise à zéro ;
   - `statusline-original.json` : votre ligne de statut d'origine, si elle a été conservée à la connexion, pour pouvoir la restaurer.
-- **Configuration de Claude Code :** le widget ne modifie `settings.json` que lorsque vous cliquez sur *Connecter*, *Mettre à jour* ou *Déconnecter*, et seule la clé `statusLine` change. Les autres réglages sont conservés, dans le même ordre, avec une indentation normalisée à deux espaces. Une sauvegarde `settings.json.bak-usage-widget-<date>` est créée avant chaque modification.
+- **Registre Windows (utilisateur courant uniquement) :** lancement au démarrage (`HKCU\...\Run`) si vous l'activez, et entrée « Applications installées » (`HKCU\...\Uninstall`) pour la copie installée. Les deux sont retirés à la désinstallation.
+- **Configuration de Claude Code :** le widget ne modifie `settings.json` que lorsque vous cliquez sur *Connecter*, *Mettre à jour*, *Déconnecter* ou *Désinstaller*, et seule la clé `statusLine` change. Les autres réglages sont conservés, dans le même ordre, avec une indentation normalisée à deux espaces. Une sauvegarde `settings.json.bak-usage-widget-<date>` est créée avant chaque modification.
 
 ### Limites connues
 
@@ -179,6 +195,8 @@ src/
   UsageStore.cs    lecture et écriture du fichier de données, pont de ligne de statut
   Settings.cs      préférences .ini, lancement au démarrage (registre HKCU)
   ConfigForm.cs    fenêtre de mise en route et de configuration
+  AboutForm.cs     fenêtre « À propos » (auteur et version injectés à la compilation)
+  Uninstall.cs     inscription dans « Applications installées » et désinstallation
   WidgetForm.cs    fenêtre, dessin, thèmes, icône de notification, menu
 build.ps1          compilation avec csc.exe (paramètre -Version)
 ```
