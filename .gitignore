@@ -1,0 +1,16 @@
+# Binaires compilés
+dist/
+*.exe
+*.pdb
+
+# Données locales et secrets : ne jamais versionner
+settings.ini
+token.dat
+.credentials.json
+*.credentials.json
+.env
+.env.*
+
+# Éditeurs
+.vs/
+.vscode/
