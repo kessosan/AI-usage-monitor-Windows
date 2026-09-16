@@ -7,22 +7,22 @@ using System.Windows.Forms;
 namespace ClaudeUsageWidget
 {
     /// <summary>
-    /// Fenêtre « Configuration » : emplacement du fichier de données et instructions pour que
-    /// Claude Code (ou claude-hud) l'alimente via la ligne de statut.
+    /// Fenêtre « Configuration » : emplacement du fichier de données et bloc de configuration
+    /// permettant à Claude Code de l'alimenter via sa ligne de statut.
     /// </summary>
     class ConfigForm : Form
     {
         const int FieldWidth = 420;
 
         readonly Settings settings;
-        readonly TextBox txtPath, txtStatusLine, txtHud;
+        readonly TextBox txtPath, txtStatusLine;
         readonly Label lblState;
 
         public ConfigForm(Settings settings)
         {
             this.settings = settings;
 
-            Text = "Utilisation Claude · Configuration";
+            Text = L.T("CfgTitle");
             Font = SystemFonts.MessageBoxFont;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -42,44 +42,32 @@ namespace ClaudeUsageWidget
             };
             Controls.Add(layout);
 
-            layout.Controls.Add(Heading("Source des données", 0));
-            layout.Controls.Add(Hint(
-                "Le widget n'accède ni à votre compte ni au réseau. Il affiche les quotas que Claude Code " +
-                "transmet à sa ligne de statut (fonctionnalité officielle), enregistrés dans un fichier local.", 0));
+            layout.Controls.Add(Heading(L.T("CfgSourceHeading"), 0));
+            layout.Controls.Add(Hint(L.T("CfgSourceHint")));
 
-            layout.Controls.Add(Heading("Fichier de données", 10));
+            layout.Controls.Add(Heading(L.T("CfgFileHeading"), 10));
             txtPath = new TextBox { Width = FieldWidth, Text = settings.DataPath };
-            var btnBrowse = new Button { Text = "Parcourir…", AutoSize = true };
+            var btnBrowse = new Button { Text = L.T("Browse"), AutoSize = true };
             btnBrowse.Click += delegate { Browse(); };
-            var btnDefault = new Button { Text = "Par défaut", AutoSize = true };
+            var btnDefault = new Button { Text = L.T("Default"), AutoSize = true };
             btnDefault.Click += delegate { txtPath.Text = UsageStore.DefaultPath(); };
-            layout.Controls.Add(Row(0, txtPath, btnBrowse, btnDefault));
+            layout.Controls.Add(Row(txtPath, btnBrowse, btnDefault));
 
             lblState = new Label { AutoSize = true, MaximumSize = new Size(FieldWidth, 0), Margin = new Padding(0, 7, 0, 0) };
-            var btnCheck = new Button { Text = "Vérifier", AutoSize = true };
+            var btnCheck = new Button { Text = L.T("Check"), AutoSize = true };
             btnCheck.Click += delegate { UpdateState(); };
-            layout.Controls.Add(Row(0, btnCheck, lblState));
+            layout.Controls.Add(Row(btnCheck, lblState));
 
-            layout.Controls.Add(Heading("Brancher Claude Code (un seul des deux cas)", 14));
-
-            layout.Controls.Add(Heading("1. Vous n'avez pas encore de ligne de statut", 6, false));
-            layout.Controls.Add(Hint("Ajoutez ce bloc dans %USERPROFILE%\\.claude\\settings.json, puis redémarrez Claude Code. " +
-                "Si vous déplacez l'exécutable, mettez à jour le chemin.", 0));
+            layout.Controls.Add(Heading(L.T("CfgConnectHeading"), 14));
+            layout.Controls.Add(Hint(L.T("CfgStatusLineHint")));
             txtStatusLine = Snippet(4);
-            layout.Controls.Add(Row(0, txtStatusLine, CopyButton(txtStatusLine)));
+            layout.Controls.Add(Row(txtStatusLine, CopyButton(txtStatusLine)));
+            layout.Controls.Add(Hint(L.T("CfgExistingHint")));
 
-            layout.Controls.Add(Heading("2. Vous utilisez déjà claude-hud comme ligne de statut", 10, false));
-            layout.Controls.Add(Hint("Ajoutez cette ligne dans la section « display » de " +
-                "%USERPROFILE%\\.claude\\plugins\\claude-hud\\config.json :", 0));
-            txtHud = Snippet(1);
-            layout.Controls.Add(Row(0, txtHud, CopyButton(txtHud)));
-
-            layout.Controls.Add(Hint("Une autre ligne de statut peut aussi écrire ce fichier : le format est décrit dans le README.", 0));
-
-            var btnOk = new Button { Text = "Enregistrer", AutoSize = true, MinimumSize = new Size(90, 0) };
+            var btnOk = new Button { Text = L.T("Save"), AutoSize = true, MinimumSize = new Size(90, 0) };
             btnOk.Click += delegate { Save(); };
-            var btnCancel = new Button { Text = "Annuler", AutoSize = true, MinimumSize = new Size(90, 0), DialogResult = DialogResult.Cancel };
-            var buttons = Row(0, btnCancel, btnOk);
+            var btnCancel = new Button { Text = L.T("Cancel"), AutoSize = true, MinimumSize = new Size(90, 0), DialogResult = DialogResult.Cancel };
+            var buttons = Row(btnCancel, btnOk);
             buttons.FlowDirection = FlowDirection.RightToLeft;
             buttons.Dock = DockStyle.Right;
             buttons.Margin = new Padding(0, 14, 0, 0);
@@ -87,25 +75,24 @@ namespace ClaudeUsageWidget
             AcceptButton = btnOk;
             CancelButton = btnCancel;
 
-            txtPath.TextChanged += delegate { UpdateSnippets(); };
-            UpdateSnippets();
+            UpdateSnippet();
             UpdateState();
         }
 
         // ------------------------------------------------------------------ construction
 
-        Label Heading(string text, int top, bool large = true)
+        Label Heading(string text, int top)
         {
             return new Label
             {
                 Text = text,
                 AutoSize = true,
-                Font = new Font(Font.FontFamily, large ? Font.Size * 1.1f : Font.Size, FontStyle.Bold),
+                Font = new Font(Font.FontFamily, Font.Size * 1.1f, FontStyle.Bold),
                 Margin = new Padding(0, top, 0, 3),
             };
         }
 
-        static Label Hint(string text, int indent)
+        static Label Hint(string text)
         {
             return new Label
             {
@@ -113,7 +100,7 @@ namespace ClaudeUsageWidget
                 AutoSize = true,
                 MaximumSize = new Size(FieldWidth + 160, 0),
                 ForeColor = SystemColors.GrayText,
-                Margin = new Padding(indent, 0, 0, 4),
+                Margin = new Padding(0, 0, 0, 4),
             };
         }
 
@@ -132,32 +119,32 @@ namespace ClaudeUsageWidget
             return box;
         }
 
-        Button CopyButton(TextBox source)
+        static Button CopyButton(TextBox source)
         {
-            var button = new Button { Text = "Copier", AutoSize = true };
+            var button = new Button { Text = L.T("Copy"), AutoSize = true };
             button.Click += delegate
             {
                 try
                 {
                     Clipboard.SetText(source.Text);
-                    button.Text = "Copié";
+                    button.Text = L.T("Copied");
                 }
                 catch (Exception)
                 {
-                    button.Text = "Échec";
+                    button.Text = L.T("CopyFailed");
                 }
             };
             return button;
         }
 
-        static FlowLayoutPanel Row(int indent, params Control[] controls)
+        static FlowLayoutPanel Row(params Control[] controls)
         {
             var row = new FlowLayoutPanel
             {
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 WrapContents = false,
-                Margin = new Padding(indent, 2, 0, 2),
+                Margin = new Padding(0, 2, 0, 2),
             };
             row.Controls.AddRange(controls);
             return row;
@@ -170,48 +157,46 @@ namespace ClaudeUsageWidget
             get { return txtPath.Text.Trim(); }
         }
 
-        void UpdateSnippets()
+        void UpdateSnippet()
         {
-            var json = new JavaScriptSerializer();
             string exe = Application.ExecutablePath.Replace('\\', '/');
             string command = "\"" + exe + "\" " + Program.StatusLineArgument;
             txtStatusLine.Text =
                 "\"statusLine\": {\r\n" +
                 "  \"type\": \"command\",\r\n" +
-                "  \"command\": " + json.Serialize(command) + "\r\n" +
+                "  \"command\": " + new JavaScriptSerializer().Serialize(command) + "\r\n" +
                 "}";
-            txtHud.Text = "\"externalUsageWritePath\": " + json.Serialize(EnteredPath);
         }
 
         void UpdateState()
         {
             string path = EnteredPath;
-            ReadResult result = path.Length > 0 ? UsageStore.Read(path) : new ReadResult { Error = "Aucun fichier indiqué" };
+            ReadResult result = path.Length > 0 ? UsageStore.Read(path) : new ReadResult { Error = L.T("CfgNoFile") };
             if (result.Snapshot == null)
             {
                 lblState.ForeColor = SystemColors.GrayText;
-                lblState.Text = File.Exists(path) ? result.Error : "Aucune donnée reçue pour l'instant.";
+                lblState.Text = File.Exists(path) ? result.Error : L.T("CfgNoData");
                 return;
             }
             DateTime local = result.Snapshot.UpdatedAt.LocalDateTime;
             lblState.ForeColor = Color.FromArgb(16, 124, 16);
-            lblState.Text = "Données reçues le " + local.ToString("dd/MM/yyyy 'à' HH:mm") + " (" + Ago(DateTime.Now - local) + ").";
+            lblState.Text = L.F("CfgReceived", local.ToString("g", L.Format), Ago(DateTime.Now - local));
         }
 
         static string Ago(TimeSpan span)
         {
-            if (span.TotalMinutes < 1) return "à l'instant";
-            if (span.TotalHours < 1) return "il y a " + (int)span.TotalMinutes + " min";
-            if (span.TotalDays < 1) return "il y a " + (int)span.TotalHours + " h";
-            return "il y a " + (int)span.TotalDays + " j";
+            if (span.TotalMinutes < 1) return L.T("AgoNow");
+            if (span.TotalHours < 1) return L.F("AgoMinutes", (int)span.TotalMinutes);
+            if (span.TotalDays < 1) return L.F("AgoHours", (int)span.TotalHours);
+            return L.F("AgoDays", (int)span.TotalDays);
         }
 
         void Browse()
         {
             using (var dialog = new SaveFileDialog())
             {
-                dialog.Title = "Fichier de données";
-                dialog.Filter = "Fichiers JSON (*.json)|*.json";
+                dialog.Title = L.T("CfgFileHeading");
+                dialog.Filter = L.T("JsonFilter");
                 dialog.OverwritePrompt = false;
                 dialog.FileName = Path.GetFileName(EnteredPath);
                 string dir = Path.GetDirectoryName(EnteredPath.Length > 0 ? EnteredPath : UsageStore.DefaultPath());
@@ -225,16 +210,16 @@ namespace ClaudeUsageWidget
             string path = EnteredPath;
             if (!Path.IsPathRooted(path) || !path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                MessageBox.Show(this, "Indiquez un chemin complet vers un fichier .json.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, L.T("ErrPathInvalid"), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)); // claude-hud exige un dossier existant
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Impossible de créer le dossier : " + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, L.F("ErrCreateFolder", ex.Message), Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 

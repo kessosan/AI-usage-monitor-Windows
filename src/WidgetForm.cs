@@ -66,10 +66,8 @@ namespace ClaudeUsageWidget
         Color Accent { get { return theme.Accent; } }
         Color Warn { get { return theme.Warn; } }
 
-        static readonly CultureInfo Fr = new CultureInfo("fr-FR");
-
-        const string Title = "Utilisation Claude";
-        const string ShortTitle = "Claude";
+        static readonly string Title = L.T("Title");
+        static readonly string ShortTitle = L.T("ShortTitle");
 
         class Segment
         {
@@ -136,7 +134,7 @@ namespace ClaudeUsageWidget
             menu = BuildMenu();
             ContextMenuStrip = menu;
 
-            tray = new NotifyIcon { ContextMenuStrip = menu, Text = Title + " · chargement…" };
+            tray = new NotifyIcon { ContextMenuStrip = menu, Text = Title + " · " + L.T("LoadingShort") };
             tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ToggleVisible(); };
             UpdateTray();
             tray.Visible = true;
@@ -435,6 +433,8 @@ namespace ClaudeUsageWidget
         void OnTick()
         {
             RefreshData(false);
+            // Le compte à rebours peut s'allonger (ex. « 1 j 0 h » -> « 23 h 59 ») : on élargit si besoin, sans jamais rétrécir entre deux lectures.
+            if (!settings.Compact && FullSize().Width > ClientSize.Width) Relayout();
             Invalidate();   // comptes à rebours et passage des remises à zéro
             UpdateTray();
         }
@@ -457,7 +457,21 @@ namespace ClaudeUsageWidget
                 h += S(32);
             else
                 h += rows * S(48) + (status != null ? S(32) : 0);
-            return new Size(S(252), h + S(4));
+            return new Size((int)Math.Ceiling(FullContentWidth()) + 2 * S(12), h + S(4));
+        }
+
+        /// <summary>Largeur utile : 228 px au minimum, davantage si les textes de la langue l'exigent.</summary>
+        float FullContentWidth()
+        {
+            float gap = S(16);
+            float width = Math.Max(S(228), Measure(measure, Title, fontTitle) + gap + Measure(measure, UpdatedLabel(), fontSmall));
+            if (windows != null)
+                foreach (UsageWindow w in windows)
+                {
+                    width = Math.Max(width, Measure(measure, w.Label, fontMain) + gap + Measure(measure, FormatPercent(w.CurrentPercent), fontBold));
+                    width = Math.Max(width, Measure(measure, ResetLabel(w), fontSmall) + gap); // marge pour le compte à rebours
+                }
+            return width;
         }
 
         Size CompactSize()
@@ -474,7 +488,7 @@ namespace ClaudeUsageWidget
             list.Add(new Segment(ShortTitle + "   ", fontBold, TextMain));
             if (windows == null)
             {
-                list.Add(new Segment(status != null ? "erreur" : "chargement…", fontSmall, status != null ? Warn : TextDim));
+                list.Add(new Segment(status != null ? L.T("ErrorShort") : L.T("LoadingShort"), fontSmall, status != null ? Warn : TextDim));
                 return list;
             }
 
@@ -482,14 +496,14 @@ namespace ClaudeUsageWidget
             UsageWindow week = Find("seven_day");
             if (session != null)
             {
-                list.Add(new Segment("5 h  ", fontSmall, TextDim));
+                list.Add(new Segment(L.T("CompactSession") + "  ", fontSmall, TextDim));
                 list.Add(new Segment(FormatPercent(session.CurrentPercent), fontBold, SeverityColor(session.CurrentPercent)));
                 if (session.ResetsAt.HasValue && !session.IsReset)
                     list.Add(new Segment("  → " + FormatWhen(session.ResetsAt.Value.LocalDateTime, true), fontSmall, TextDim));
             }
             if (week != null)
             {
-                list.Add(new Segment(session != null ? "     sem.  " : "sem.  ", fontSmall, TextDim));
+                list.Add(new Segment((session != null ? "     " : "") + L.T("CompactWeek") + "  ", fontSmall, TextDim));
                 list.Add(new Segment(FormatPercent(week.CurrentPercent), fontBold, SeverityColor(week.CurrentPercent)));
             }
             if (status != null)
@@ -534,7 +548,7 @@ namespace ClaudeUsageWidget
 
             if (windows == null || windows.Count == 0)
             {
-                DrawWrapped(g, status ?? "Chargement…", status == null ? TextDim : Warn, pad, y, width - 2 * pad);
+                DrawWrapped(g, status ?? L.T("Loading"), status == null ? TextDim : Warn, pad, y, width - 2 * pad);
                 return;
             }
 
@@ -632,32 +646,32 @@ namespace ClaudeUsageWidget
 
         static string FormatPercent(double percent)
         {
-            return ((int)Math.Round(percent)).ToString(CultureInfo.InvariantCulture) + " %";
+            return L.Percent(percent);
         }
 
         string UpdatedLabel()
         {
             if (!updatedAt.HasValue) return "";
             DateTime local = updatedAt.Value.LocalDateTime;
-            return "maj " + local.ToString(local.Date == DateTime.Today ? "HH:mm" : "dd/MM HH:mm", Fr);
+            return L.F("Updated", local.Date == DateTime.Today ? L.Time(local) : L.MonthDay(local) + " " + L.Time(local));
         }
 
         static string ResetLabel(UsageWindow w)
         {
             if (!w.ResetsAt.HasValue)
-                return w.Key == "five_hour" ? "Aucune session en cours" : "";
+                return w.Key == "five_hour" ? L.T("NoSession") : "";
             DateTime local = w.ResetsAt.Value.LocalDateTime;
             if (w.IsReset)
-                return "RAZ à " + FormatWhen(local, false) + " · en attente de Claude Code";
-            return "RAZ " + FormatWhen(local, false) + " · dans " + FormatSpan(local - DateTime.Now);
+                return L.F("ResetDone", FormatWhen(local, false));
+            return L.F("ResetsIn", FormatWhen(local, false), FormatSpan(local - DateTime.Now));
         }
 
         static string FormatWhen(DateTime local, bool compact)
         {
-            string time = local.ToString("HH:mm", Fr);
+            string time = L.Time(local);
             if (local.Date == DateTime.Today) return time;
-            if (local.Date == DateTime.Today.AddDays(1)) return (compact ? "dem. " : "demain ") + time;
-            return local.ToString(compact ? "ddd HH:mm" : "ddd dd/MM HH:mm", Fr);
+            if (local.Date == DateTime.Today.AddDays(1)) return L.F(compact ? "TomorrowShort" : "Tomorrow", time);
+            return (compact ? local.ToString("ddd", L.Format) : L.WeekdayMonthDay(local)) + " " + time;
         }
 
         static string FormatSpan(TimeSpan span)
@@ -666,9 +680,9 @@ namespace ClaudeUsageWidget
             int days = totalMinutes / 1440;
             int hours = totalMinutes % 1440 / 60;
             int minutes = totalMinutes % 60;
-            if (days > 0) return days + " j " + hours + " h";
-            if (hours > 0) return hours + " h " + minutes.ToString("00");
-            return minutes + " min";
+            if (days > 0) return L.F("SpanDaysHours", days, hours);
+            if (hours > 0) return L.F("SpanHoursMinutes", hours, minutes);
+            return L.F("SpanMinutes", minutes);
         }
 
         // ---------------------------------------------------------------- zone de notification
@@ -691,18 +705,18 @@ namespace ClaudeUsageWidget
 
             string tip;
             if (windows == null)
-                tip = Title + " · " + (status ?? "chargement…");
+                tip = Title + " · " + (status ?? L.T("LoadingShort"));
             else
             {
                 tip = Title;
                 if (session != null)
                 {
-                    tip += " · 5 h : " + FormatPercent(session.CurrentPercent);
+                    tip += " · " + L.F("TipSession", FormatPercent(session.CurrentPercent));
                     if (session.ResetsAt.HasValue && !session.IsReset)
                         tip += " (→ " + FormatWhen(session.ResetsAt.Value.LocalDateTime, true) + ")";
                 }
                 UsageWindow week = Find("seven_day");
-                if (week != null) tip += "\nSemaine : " + FormatPercent(week.CurrentPercent);
+                if (week != null) tip += "\n" + L.F("TipWeek", FormatPercent(week.CurrentPercent));
                 if (status != null) tip += "\n" + status;
             }
             tray.Text = tip.Length > 63 ? tip.Substring(0, 62) + "…" : tip;
@@ -759,18 +773,18 @@ namespace ClaudeUsageWidget
         {
             var m = new ContextMenuStrip();
 
-            miShow = new ToolStripMenuItem("Afficher le widget", null, delegate { ToggleVisible(); });
-            var miRefresh = new ToolStripMenuItem("Actualiser maintenant", null, delegate { RefreshData(true); });
-            var miConfig = new ToolStripMenuItem("Configuration…", null, delegate { OpenConfig(); });
-            miCompact = new ToolStripMenuItem("Mode compact (double-clic)", null, delegate { ToggleCompact(); });
-            miTopMost = new ToolStripMenuItem("Toujours au premier plan", null, delegate
+            miShow = new ToolStripMenuItem(L.T("MenuShow"), null, delegate { ToggleVisible(); });
+            var miRefresh = new ToolStripMenuItem(L.T("MenuRefresh"), null, delegate { RefreshData(true); });
+            var miConfig = new ToolStripMenuItem(L.T("MenuSettings"), null, delegate { OpenConfig(); });
+            miCompact = new ToolStripMenuItem(L.T("MenuCompact"), null, delegate { ToggleCompact(); });
+            miTopMost = new ToolStripMenuItem(L.T("MenuTopMost"), null, delegate
             {
                 settings.TopMost = !settings.TopMost;
                 TopMost = settings.TopMost;
                 SaveSettings();
             });
 
-            var opacityMenu = new ToolStripMenuItem("Opacité");
+            var opacityMenu = new ToolStripMenuItem(L.T("MenuOpacity"));
             foreach (int value in new[] { 100, 90, 80, 70, 50 })
             {
                 int v = value;
@@ -784,12 +798,12 @@ namespace ClaudeUsageWidget
                 opacityMenu.DropDownItems.Add(item);
             }
 
-            var themeMenu = new ToolStripMenuItem("Thème");
+            var themeMenu = new ToolStripMenuItem(L.T("MenuTheme"));
             string[][] themes =
             {
-                new[] { Settings.ThemeDark, "Sombre" },
-                new[] { Settings.ThemeLight, "Clair" },
-                new[] { Settings.ThemeSystem, "Selon Windows" },
+                new[] { Settings.ThemeDark, L.T("ThemeDark") },
+                new[] { Settings.ThemeLight, L.T("ThemeLight") },
+                new[] { Settings.ThemeSystem, L.T("ThemeSystem") },
             };
             foreach (string[] entry in themes)
             {
@@ -799,13 +813,13 @@ namespace ClaudeUsageWidget
                 themeMenu.DropDownItems.Add(item);
             }
 
-            miStartup = new ToolStripMenuItem("Lancer au démarrage de Windows", null, delegate
+            miStartup = new ToolStripMenuItem(L.T("MenuStartup"), null, delegate
             {
                 try { Startup.Set(!Startup.IsEnabled()); }
-                catch (Exception ex) { MessageBox.Show(ex.Message, "Claude Usage", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                catch (Exception ex) { MessageBox.Show(ex.Message, Title, MessageBoxButtons.OK, MessageBoxIcon.Warning); }
             });
 
-            var miQuit = new ToolStripMenuItem("Quitter", null, delegate
+            var miQuit = new ToolStripMenuItem(L.T("MenuQuit"), null, delegate
             {
                 quitting = true;
                 Close();

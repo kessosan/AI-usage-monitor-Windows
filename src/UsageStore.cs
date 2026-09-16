@@ -43,7 +43,7 @@ namespace ClaudeUsageWidget
     /// Fichier d'échange local contenant les quotas transmis par la ligne de statut de Claude Code
     /// (champ documenté « rate_limits »). Le widget ne manipule aucun identifiant et n'accède pas au réseau.
     ///
-    /// Format, compatible avec l'option « externalUsageWritePath » de claude-hud :
+    /// Format :
     /// { "updated_at": ISO-8601,
     ///   "five_hour":   { "used_percentage": 0-100, "resets_at": ISO-8601 | epoch s | null },
     ///   "seven_day":   { ... },
@@ -55,9 +55,9 @@ namespace ClaudeUsageWidget
 
         static readonly string[][] KnownWindows =
         {
-            new[] { "five_hour", "Session (5 h)" },
-            new[] { "seven_day", "Semaine" },
-            new[] { "spend_limit", "Plafond de dépenses" },
+            new[] { "five_hour", "WindowSession" },
+            new[] { "seven_day", "WindowWeek" },
+            new[] { "spend_limit", "WindowSpend" },
         };
 
         public static string DefaultPath()
@@ -70,13 +70,13 @@ namespace ClaudeUsageWidget
         public static ReadResult Read(string path)
         {
             if (!File.Exists(path))
-                return Fail("En attente de Claude Code : clic droit > Configuration");
+                return Fail(L.T("ErrWaiting"));
             try
             {
                 var root = Parse(ReadShared(path));
                 DateTimeOffset? updated = ParseDate(Get(root, "updated_at"));
                 if (root == null || !updated.HasValue)
-                    return Fail("Fichier de données illisible");
+                    return Fail(L.T("ErrUnreadable"));
 
                 var snapshot = new UsageSnapshot { UpdatedAt = updated.Value };
                 foreach (string[] known in KnownWindows)
@@ -87,22 +87,22 @@ namespace ClaudeUsageWidget
                     snapshot.Windows.Add(new UsageWindow
                     {
                         Key = known[0],
-                        Label = known[1],
+                        Label = L.T(known[1]),
                         Percent = Math.Max(0, pct.Value),
                         ResetsAt = ParseDate(Get(o, "resets_at")),
                     });
                 }
                 if (snapshot.Windows.Count == 0)
-                    return Fail("Aucun quota dans le fichier de données");
+                    return Fail(L.T("ErrNoQuota"));
                 return new ReadResult { Snapshot = snapshot };
             }
             catch (IOException)
             {
-                return Fail("Fichier de données verrouillé, nouvel essai bientôt");
+                return Fail(L.T("ErrLocked"));
             }
             catch (Exception)
             {
-                return Fail("Fichier de données illisible");
+                return Fail(L.T("ErrUnreadable"));
             }
         }
 
@@ -196,8 +196,8 @@ namespace ClaudeUsageWidget
             var rate = Obj(input, "rate_limits");
             double? session = Num(Obj(rate, "five_hour"), "used_percentage");
             double? week = Num(Obj(rate, "seven_day"), "used_percentage");
-            if (session.HasValue) parts.Add("5h " + Math.Round(session.Value).ToString(CultureInfo.InvariantCulture) + "%");
-            if (week.HasValue) parts.Add("7j " + Math.Round(week.Value).ToString(CultureInfo.InvariantCulture) + "%");
+            if (session.HasValue) parts.Add(L.F("StatusSession", Math.Round(session.Value)));
+            if (week.HasValue) parts.Add(L.F("StatusWeek", Math.Round(week.Value)));
 
             return parts.Count > 0 ? string.Join(" | ", parts) : "Claude";
         }

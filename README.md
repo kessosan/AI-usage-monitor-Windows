@@ -38,9 +38,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 Prérequis : Claude Code, connecté avec un abonnement claude.ai **Pro ou Max**.
 
-Clic droit sur le widget > **Configuration…** : la fenêtre fournit les blocs prêts à copier. Choisissez **un seul** des deux cas suivants.
+Clic droit sur le widget > **Configuration…** : la fenêtre fournit le bloc prêt à copier.
 
-**1. Vous n'avez pas encore de ligne de statut.** Ajoutez ce bloc dans `%USERPROFILE%\.claude\settings.json`, en adaptant le chemin de l'exe, puis redémarrez Claude Code :
+Ajoutez ce bloc dans `%USERPROFILE%\.claude\settings.json`, en adaptant le chemin de l'exe, puis redémarrez Claude Code :
 
 ```json
 "statusLine": {
@@ -51,13 +51,7 @@ Clic droit sur le widget > **Configuration…** : la fenêtre fournit les blocs 
 
 Claude Code appelle alors l'exe à chaque mise à jour de sa ligne de statut. L'exe enregistre les quotas, puis affiche un résumé court (`[Opus 5] | 5h 24% | 7j 41%`).
 
-**2. Vous utilisez déjà [claude-hud](https://github.com/jarrodwatts/claude-hud).** Ajoutez cette ligne dans la section `display` de `%USERPROFILE%\.claude\plugins\claude-hud\config.json` :
-
-```json
-"externalUsageWritePath": "C:\\Users\\<vous>\\AppData\\Roaming\\ClaudeUsageWidget\\usage.json"
-```
-
-**Autre ligne de statut :** elle peut écrire elle-même le fichier de données (format ci-dessous).
+**Vous utilisez déjà une autre ligne de statut ?** Elle peut écrire elle-même le fichier de données (format ci-dessous).
 
 Conseils :
 
@@ -76,10 +70,19 @@ Conseils :
 
 L'en-tête indique l'heure des dernières données reçues (« maj 14:05 »).
 
+### Langue et formats
+
+Le widget reprend les réglages de Windows :
+
+- **langue des textes** : langue d'affichage de Windows. Français et anglais sont disponibles ; pour toute autre langue, les textes s'affichent en anglais ;
+- **dates, heures et pourcentages** : format régional de Windows (par exemple `14:36` et `24 %` en France, `2:36 PM` et `24%` aux États-Unis).
+
+Pour ajouter une langue, créez un dictionnaire de traductions dans `src/Localization.cs`, avec les mêmes clés que l'anglais.
+
 ## Fonctionnement
 
 1. Après chaque réponse, Claude Code transmet à la commande de ligne de statut un JSON qui contient `rate_limits.five_hour` et `rate_limits.seven_day` (pourcentage utilisé et heure de remise à zéro).
-2. La commande (`ClaudeUsageWidget.exe --statusline` ou claude-hud) enregistre ces valeurs dans `%APPDATA%\ClaudeUsageWidget\usage.json`. Si rien n'a changé, le fichier n'est réécrit qu'une fois toutes les 30 secondes au plus.
+2. La commande de ligne de statut (`ClaudeUsageWidget.exe --statusline`) enregistre ces valeurs dans `%APPDATA%\ClaudeUsageWidget\usage.json`. Si rien n'a changé, le fichier n'est réécrit qu'une fois toutes les 30 secondes au plus.
 3. Le widget vérifie ce fichier toutes les 5 secondes et se met à jour dès qu'il change.
 
 Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
@@ -110,6 +113,7 @@ Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
 ```
 src/
   Program.cs       point d'entrée, instance unique, mode --statusline
+  Localization.cs  textes traduits (français, anglais) et formats régionaux
   UsageStore.cs    lecture et écriture du fichier de données, pont de ligne de statut
   Settings.cs      préférences .ini, lancement au démarrage (registre HKCU)
   ConfigForm.cs    fenêtre de configuration (fichier de données, branchement de Claude Code)
