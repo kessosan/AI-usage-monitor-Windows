@@ -165,16 +165,3 @@ src/
 build.ps1          compilation avec csc.exe (paramètre -Version)
 .github/workflows/release.yml   compilation automatique et publication des Releases
 ```
-
-## Publier une nouvelle version
-
-La compilation et la publication sont automatisées par GitHub Actions :
-
-```powershell
-git tag v1.1.0
-git push origin v1.1.0
-```
-
-Le workflow compile l'exe sur un runner Windows avec ce numéro de version, calcule son empreinte SHA-256, puis crée la Release avec les deux fichiers et des notes générées à partir des commits. Un tag contenant un tiret (par exemple `v1.1.0-beta.1`) est publié comme préversion.
-
-Pour compiler sans rien publier, lancez le workflow manuellement (onglet *Actions* > *Build et Release* > *Run workflow*). L'exe est alors disponible en artefact du workflow.
