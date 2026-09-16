@@ -34,7 +34,8 @@ jobs:
         shell: pwsh
         run: |
           $hash = (Get-FileHash dist/ClaudeUsageWidget.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  ClaudeUsageWidget.exe" | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          # Fin de ligne LF : lisible par Get-FileHash comme par « sha256sum -c » (Git Bash, Linux, macOS)
+          [IO.File]::WriteAllText((Join-Path $PWD 'dist/SHA256SUMS.txt'), "$hash  ClaudeUsageWidget.exe`n", [Text.Encoding]::ASCII)
           Get-Content dist/SHA256SUMS.txt
           (Get-Item dist/ClaudeUsageWidget.exe).VersionInfo | Format-List ProductVersion, FileVersion
 
