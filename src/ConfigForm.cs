@@ -1,22 +1,22 @@
 using System;
 using System.Drawing;
 using System.IO;
-using System.Threading;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 namespace ClaudeUsageWidget
 {
-    /// <summary>Fenêtre « Configuration » : choix de la source du jeton d'accès au compte Claude.</summary>
+    /// <summary>
+    /// Fenêtre « Configuration » : emplacement du fichier de données et instructions pour que
+    /// Claude Code (ou claude-hud) l'alimente via la ligne de statut.
+    /// </summary>
     class ConfigForm : Form
     {
-        const int FieldWidth = 360;
+        const int FieldWidth = 420;
 
         readonly Settings settings;
-        readonly RadioButton rbAuto, rbFile, rbManual;
-        readonly TextBox txtPath, txtToken;
-        readonly Button btnBrowse, btnClearToken, btnTest;
-        readonly Label lblTokenState, lblTest;
-        bool tokenCleared;
+        readonly TextBox txtPath, txtStatusLine, txtHud;
+        readonly Label lblState;
 
         public ConfigForm(Settings settings)
         {
@@ -42,46 +42,39 @@ namespace ClaudeUsageWidget
             };
             Controls.Add(layout);
 
-            layout.Controls.Add(new Label
-            {
-                Text = "Accès au compte Claude",
-                Font = new Font(Font.FontFamily, Font.Size * 1.15f, FontStyle.Bold),
-                AutoSize = true,
-                Margin = new Padding(0, 0, 0, 6),
-            });
+            layout.Controls.Add(Heading("Source des données", 0));
             layout.Controls.Add(Hint(
-                "Aucun identifiant ni mot de passe n'est enregistré par le widget. " +
-                "Choisissez comment il obtient le jeton d'accès à l'API d'usage :", 0));
+                "Le widget n'accède ni à votre compte ni au réseau. Il affiche les quotas que Claude Code " +
+                "transmet à sa ligne de statut (fonctionnalité officielle), enregistrés dans un fichier local.", 0));
 
-            rbAuto = Radio("Automatique : session Claude Code (recommandé)");
-            layout.Controls.Add(rbAuto);
-            layout.Controls.Add(Hint("Lu dans " + UsageClient.DefaultCredentialsPath() + ", renouvelé par Claude Code.", 18));
-
-            rbFile = Radio("Fichier d'identifiants personnalisé (format Claude Code)");
-            layout.Controls.Add(rbFile);
-            txtPath = new TextBox { Width = FieldWidth, Text = settings.CredentialsPath };
-            btnBrowse = new Button { Text = "Parcourir…", AutoSize = true };
+            layout.Controls.Add(Heading("Fichier de données", 10));
+            txtPath = new TextBox { Width = FieldWidth, Text = settings.DataPath };
+            var btnBrowse = new Button { Text = "Parcourir…", AutoSize = true };
             btnBrowse.Click += delegate { Browse(); };
-            layout.Controls.Add(Row(18, txtPath, btnBrowse));
+            var btnDefault = new Button { Text = "Par défaut", AutoSize = true };
+            btnDefault.Click += delegate { txtPath.Text = UsageStore.DefaultPath(); };
+            layout.Controls.Add(Row(0, txtPath, btnBrowse, btnDefault));
 
-            rbManual = Radio("Jeton OAuth saisi manuellement");
-            layout.Controls.Add(rbManual);
-            txtToken = new TextBox { Width = FieldWidth, UseSystemPasswordChar = true };
-            btnClearToken = new Button { Text = "Effacer", AutoSize = true };
-            btnClearToken.Click += delegate
-            {
-                tokenCleared = true;
-                txtToken.Clear();
-                UpdateTokenState();
-            };
-            layout.Controls.Add(Row(18, txtToken, btnClearToken));
-            lblTokenState = Hint("", 18);
-            layout.Controls.Add(lblTokenState);
+            lblState = new Label { AutoSize = true, MaximumSize = new Size(FieldWidth, 0), Margin = new Padding(0, 7, 0, 0) };
+            var btnCheck = new Button { Text = "Vérifier", AutoSize = true };
+            btnCheck.Click += delegate { UpdateState(); };
+            layout.Controls.Add(Row(0, btnCheck, lblState));
 
-            btnTest = new Button { Text = "Tester la connexion", AutoSize = true };
-            btnTest.Click += delegate { RunTest(); };
-            lblTest = new Label { AutoSize = true, MaximumSize = new Size(FieldWidth, 0), Margin = new Padding(8, 7, 0, 0) };
-            layout.Controls.Add(Row(0, btnTest, lblTest));
+            layout.Controls.Add(Heading("Brancher Claude Code (un seul des deux cas)", 14));
+
+            layout.Controls.Add(Heading("1. Vous n'avez pas encore de ligne de statut", 6, false));
+            layout.Controls.Add(Hint("Ajoutez ce bloc dans %USERPROFILE%\\.claude\\settings.json, puis redémarrez Claude Code. " +
+                "Si vous déplacez l'exécutable, mettez à jour le chemin.", 0));
+            txtStatusLine = Snippet(4);
+            layout.Controls.Add(Row(0, txtStatusLine, CopyButton(txtStatusLine)));
+
+            layout.Controls.Add(Heading("2. Vous utilisez déjà claude-hud comme ligne de statut", 10, false));
+            layout.Controls.Add(Hint("Ajoutez cette ligne dans la section « display » de " +
+                "%USERPROFILE%\\.claude\\plugins\\claude-hud\\config.json :", 0));
+            txtHud = Snippet(1);
+            layout.Controls.Add(Row(0, txtHud, CopyButton(txtHud)));
+
+            layout.Controls.Add(Hint("Une autre ligne de statut peut aussi écrire ce fichier : le format est décrit dans le README.", 0));
 
             var btnOk = new Button { Text = "Enregistrer", AutoSize = true, MinimumSize = new Size(90, 0) };
             btnOk.Click += delegate { Save(); };
@@ -94,22 +87,22 @@ namespace ClaudeUsageWidget
             AcceptButton = btnOk;
             CancelButton = btnCancel;
 
-            switch (settings.TokenSource)
-            {
-                case Settings.SourceFile: rbFile.Checked = true; break;
-                case Settings.SourceManual: rbManual.Checked = true; break;
-                default: rbAuto.Checked = true; break;
-            }
-            txtToken.TextChanged += delegate { UpdateTokenState(); };
-            UpdateEnabled();
-            UpdateTokenState();
+            txtPath.TextChanged += delegate { UpdateSnippets(); };
+            UpdateSnippets();
+            UpdateState();
         }
 
-        RadioButton Radio(string text)
+        // ------------------------------------------------------------------ construction
+
+        Label Heading(string text, int top, bool large = true)
         {
-            var rb = new RadioButton { Text = text, AutoSize = true, Margin = new Padding(0, 10, 0, 2) };
-            rb.CheckedChanged += delegate { UpdateEnabled(); };
-            return rb;
+            return new Label
+            {
+                Text = text,
+                AutoSize = true,
+                Font = new Font(Font.FontFamily, large ? Font.Size * 1.1f : Font.Size, FontStyle.Bold),
+                Margin = new Padding(0, top, 0, 3),
+            };
         }
 
         static Label Hint(string text, int indent)
@@ -118,10 +111,43 @@ namespace ClaudeUsageWidget
             {
                 Text = text,
                 AutoSize = true,
-                MaximumSize = new Size(FieldWidth + 100, 0),
+                MaximumSize = new Size(FieldWidth + 160, 0),
                 ForeColor = SystemColors.GrayText,
-                Margin = new Padding(indent, 0, 0, 2),
+                Margin = new Padding(indent, 0, 0, 4),
             };
+        }
+
+        TextBox Snippet(int lines)
+        {
+            var box = new TextBox
+            {
+                Width = FieldWidth + 70,
+                ReadOnly = true,
+                Multiline = lines > 1,
+                WordWrap = false,
+                Font = new Font("Consolas", Font.SizeInPoints),
+                BackColor = SystemColors.Window,
+            };
+            if (lines > 1) box.Height = (int)Math.Ceiling(box.Font.GetHeight() * lines) + 8;
+            return box;
+        }
+
+        Button CopyButton(TextBox source)
+        {
+            var button = new Button { Text = "Copier", AutoSize = true };
+            button.Click += delegate
+            {
+                try
+                {
+                    Clipboard.SetText(source.Text);
+                    button.Text = "Copié";
+                }
+                catch (Exception)
+                {
+                    button.Text = "Échec";
+                }
+            };
+            return button;
         }
 
         static FlowLayoutPanel Row(int indent, params Control[] controls)
@@ -137,128 +163,82 @@ namespace ClaudeUsageWidget
             return row;
         }
 
-        string SelectedSource
+        // ------------------------------------------------------------------ comportement
+
+        string EnteredPath
         {
-            get
+            get { return txtPath.Text.Trim(); }
+        }
+
+        void UpdateSnippets()
+        {
+            var json = new JavaScriptSerializer();
+            string exe = Application.ExecutablePath.Replace('\\', '/');
+            string command = "\"" + exe + "\" " + Program.StatusLineArgument;
+            txtStatusLine.Text =
+                "\"statusLine\": {\r\n" +
+                "  \"type\": \"command\",\r\n" +
+                "  \"command\": " + json.Serialize(command) + "\r\n" +
+                "}";
+            txtHud.Text = "\"externalUsageWritePath\": " + json.Serialize(EnteredPath);
+        }
+
+        void UpdateState()
+        {
+            string path = EnteredPath;
+            ReadResult result = path.Length > 0 ? UsageStore.Read(path) : new ReadResult { Error = "Aucun fichier indiqué" };
+            if (result.Snapshot == null)
             {
-                if (rbFile.Checked) return Settings.SourceFile;
-                if (rbManual.Checked) return Settings.SourceManual;
-                return Settings.SourceClaudeCode;
+                lblState.ForeColor = SystemColors.GrayText;
+                lblState.Text = File.Exists(path) ? result.Error : "Aucune donnée reçue pour l'instant.";
+                return;
             }
+            DateTime local = result.Snapshot.UpdatedAt.LocalDateTime;
+            lblState.ForeColor = Color.FromArgb(16, 124, 16);
+            lblState.Text = "Données reçues le " + local.ToString("dd/MM/yyyy 'à' HH:mm") + " (" + Ago(DateTime.Now - local) + ").";
         }
 
-        bool HasStoredToken
+        static string Ago(TimeSpan span)
         {
-            get { return !tokenCleared && TokenStore.Exists(); }
-        }
-
-        void UpdateEnabled()
-        {
-            txtPath.Enabled = btnBrowse.Enabled = rbFile.Checked;
-            txtToken.Enabled = btnClearToken.Enabled = rbManual.Checked;
-        }
-
-        void UpdateTokenState()
-        {
-            string state = txtToken.TextLength > 0 ? "Le nouveau jeton remplacera l'ancien."
-                : HasStoredToken ? "Un jeton est enregistré ; laissez vide pour le conserver."
-                : "Aucun jeton enregistré.";
-            lblTokenState.Text = state + " Stockage chiffré avec votre session Windows (DPAPI).";
+            if (span.TotalMinutes < 1) return "à l'instant";
+            if (span.TotalHours < 1) return "il y a " + (int)span.TotalMinutes + " min";
+            if (span.TotalDays < 1) return "il y a " + (int)span.TotalHours + " h";
+            return "il y a " + (int)span.TotalDays + " j";
         }
 
         void Browse()
         {
-            using (var dialog = new OpenFileDialog())
+            using (var dialog = new SaveFileDialog())
             {
-                dialog.Title = "Fichier d'identifiants";
-                dialog.Filter = "Fichiers JSON (*.json)|*.json|Tous les fichiers (*.*)|*.*";
-                string current = txtPath.Text.Trim();
-                string dir = current.Length > 0 ? Path.GetDirectoryName(current) : Path.GetDirectoryName(UsageClient.DefaultCredentialsPath());
+                dialog.Title = "Fichier de données";
+                dialog.Filter = "Fichiers JSON (*.json)|*.json";
+                dialog.OverwritePrompt = false;
+                dialog.FileName = Path.GetFileName(EnteredPath);
+                string dir = Path.GetDirectoryName(EnteredPath.Length > 0 ? EnteredPath : UsageStore.DefaultPath());
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir)) dialog.InitialDirectory = dir;
                 if (dialog.ShowDialog(this) == DialogResult.OK) txtPath.Text = dialog.FileName;
             }
         }
 
-        AccessConfig BuildAccess()
-        {
-            string typed = TokenStore.Normalize(txtToken.Text);
-            return new AccessConfig
-            {
-                Source = SelectedSource,
-                CredentialsPath = txtPath.Text.Trim(),
-                ManualToken = typed.Length > 0 ? typed : HasStoredToken ? TokenStore.Load() : null,
-            };
-        }
-
-        void RunTest()
-        {
-            btnTest.Enabled = false;
-            lblTest.ForeColor = SystemColors.GrayText;
-            lblTest.Text = "Test en cours…";
-            AccessConfig access = BuildAccess();
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                FetchResult result = UsageClient.Fetch(access);
-                try
-                {
-                    BeginInvoke((MethodInvoker)delegate { ShowTestResult(result); });
-                }
-                catch (InvalidOperationException)
-                {
-                    // Fenêtre fermée pendant le test.
-                }
-            });
-        }
-
-        void ShowTestResult(FetchResult result)
-        {
-            btnTest.Enabled = true;
-            if (result.Windows == null)
-            {
-                lblTest.ForeColor = Color.FromArgb(196, 43, 28);
-                lblTest.Text = result.Error;
-                return;
-            }
-            var parts = new string[Math.Min(2, result.Windows.Count)];
-            for (int i = 0; i < parts.Length; i++)
-                parts[i] = result.Windows[i].Label + " " + Math.Round(result.Windows[i].Percent) + " %";
-            lblTest.ForeColor = Color.FromArgb(16, 124, 16);
-            lblTest.Text = "Connexion réussie : " + string.Join(", ", parts);
-        }
-
         void Save()
         {
-            string source = SelectedSource;
-            string path = txtPath.Text.Trim();
-            string typed = TokenStore.Normalize(txtToken.Text);
-
-            if (source == Settings.SourceFile && !File.Exists(path))
+            string path = EnteredPath;
+            if (!Path.IsPathRooted(path) || !path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             {
-                MessageBox.Show(this, "Le fichier d'identifiants indiqué est introuvable.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "Indiquez un chemin complet vers un fichier .json.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            if (source == Settings.SourceManual && typed.Length == 0 && !HasStoredToken)
-            {
-                MessageBox.Show(this, "Saisissez un jeton ou choisissez une autre source.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
             try
             {
-                // Un jeton manuel n'est conservé que tant que cette source est active.
-                if (source != Settings.SourceManual || (tokenCleared && typed.Length == 0))
-                    TokenStore.Clear();
-                if (source == Settings.SourceManual && typed.Length > 0)
-                    TokenStore.Save(typed);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)); // claude-hud exige un dossier existant
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Impossible d'enregistrer le jeton : " + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, "Impossible de créer le dossier : " + ex.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            settings.TokenSource = source;
-            settings.CredentialsPath = source == Settings.SourceFile ? path : "";
+            settings.CustomDataPath = string.Equals(path, UsageStore.DefaultPath(), StringComparison.OrdinalIgnoreCase) ? "" : path;
             DialogResult = DialogResult.OK;
         }
     }

@@ -6,7 +6,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Threading;
+using System.IO;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using Timer = System.Windows.Forms.Timer;
@@ -87,21 +87,21 @@ namespace ClaudeUsageWidget
         readonly Graphics measure;
         readonly NotifyIcon tray;
         readonly ContextMenuStrip menu;
-        readonly Timer pollTimer, tickTimer;
+        readonly Timer tickTimer;
 
         List<UsageWindow> windows;
-        string plan, status;
-        DateTime lastSuccess = DateTime.MinValue, lastAttempt = DateTime.MinValue;
-        bool fetching, refetchPending, quitting, initialVisibilityApplied, dragging;
+        DateTimeOffset? updatedAt;
+        string status;
+        string lastReadPath;
+        DateTime lastFileStamp = DateTime.MinValue;
+        bool quitting, initialVisibilityApplied, dragging;
         ConfigForm configForm;
-        int backoff = 1;
         Point dragOrigin;
         string trayIconKey;
 
         ToolStripMenuItem miShow, miCompact, miTopMost, miStartup;
         readonly List<ToolStripMenuItem> miTheme = new List<ToolStripMenuItem>();
         readonly List<ToolStripMenuItem> miOpacity = new List<ToolStripMenuItem>();
-        readonly List<ToolStripMenuItem> miInterval = new List<ToolStripMenuItem>();
 
         public WidgetForm()
         {
@@ -129,9 +129,8 @@ namespace ClaudeUsageWidget
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
                      ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
 
-            pollTimer = new Timer();
-            pollTimer.Tick += delegate { FetchAsync(); };
-            tickTimer = new Timer { Interval = 15000 };
+            // Lecture d'un petit fichier local : vérifier sa date toutes les 5 s ne coûte rien.
+            tickTimer = new Timer { Interval = 5000 };
             tickTimer.Tick += delegate { OnTick(); };
 
             menu = BuildMenu();
@@ -142,7 +141,6 @@ namespace ClaudeUsageWidget
             UpdateTray();
             tray.Visible = true;
 
-            SystemEvents.PowerModeChanged += OnPowerModeChanged;
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
             Relayout();
@@ -166,7 +164,7 @@ namespace ClaudeUsageWidget
             base.OnHandleCreated(e);
             ApplyWindowFrame();
             tickTimer.Start();
-            FetchAsync();
+            RefreshData(true);
         }
 
         protected override void SetVisibleCore(bool value)
@@ -199,12 +197,10 @@ namespace ClaudeUsageWidget
         {
             if (disposing)
             {
-                SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
                 tray.Visible = false;
                 if (tray.Icon != null) tray.Icon.Dispose();
                 tray.Dispose();
-                pollTimer.Dispose();
                 tickTimer.Dispose();
                 menu.Dispose();
                 measure.Dispose();
@@ -384,61 +380,37 @@ namespace ClaudeUsageWidget
 
         // ---------------------------------------------------------------- données
 
-        void FetchAsync()
+        /// <summary>Relit le fichier de données s'il a changé (ou systématiquement si force).</summary>
+        void RefreshData(bool force)
         {
-            if (!IsHandleCreated) return;
-            if (fetching)
-            {
-                refetchPending = true; // la configuration a pu changer pendant la requête en cours
-                return;
-            }
-            fetching = true;
-            lastAttempt = DateTime.Now;
-            Invalidate();
-            AccessConfig access = AccessConfig.From(settings);
-            ThreadPool.QueueUserWorkItem(delegate
-            {
-                FetchResult result = UsageClient.Fetch(access);
-                try
-                {
-                    BeginInvoke((MethodInvoker)delegate { ApplyResult(result); });
-                }
-                catch (InvalidOperationException)
-                {
-                    // Fenêtre détruite pendant la requête.
-                }
-            });
-        }
+            string path = settings.DataPath;
+            DateTime stamp = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+            if (!force && path == lastReadPath && stamp == lastFileStamp) return;
+            lastReadPath = path;
+            lastFileStamp = stamp;
 
-        void ApplyResult(FetchResult r)
-        {
-            fetching = false;
-            if (r.Plan != null) plan = r.Plan;
-            if (r.Windows != null)
+            ReadResult result = UsageStore.Read(path);
+            if (result.Snapshot != null)
             {
-                windows = r.Windows;
+                windows = result.Snapshot.Windows;
+                updatedAt = result.Snapshot.UpdatedAt;
                 status = null;
-                lastSuccess = DateTime.Now;
-                backoff = 1;
             }
             else
             {
-                status = r.Error;
-                if (r.RateLimited) backoff = Math.Min(backoff * 2, 8);
+                status = result.Error;
+                if (stamp == DateTime.MinValue)
+                {
+                    windows = null;
+                    updatedAt = null;
+                }
+                else
+                {
+                    lastFileStamp = DateTime.MinValue; // fichier présent mais illisible : nouvel essai au prochain tick
+                }
             }
-
-            pollTimer.Stop();
-            pollTimer.Interval = Math.Min(settings.IntervalSec * backoff, 1800) * 1000;
-            pollTimer.Start();
-
             Relayout();
             UpdateTray();
-
-            if (refetchPending)
-            {
-                refetchPending = false;
-                FetchAsync();
-            }
         }
 
         void OpenConfig()
@@ -454,9 +426,7 @@ namespace ClaudeUsageWidget
                 if (configForm.ShowDialog() == DialogResult.OK)
                 {
                     SaveSettings();
-                    plan = null;
-                    backoff = 1;
-                    FetchAsync();
+                    RefreshData(true);
                 }
             }
             configForm = null;
@@ -464,26 +434,9 @@ namespace ClaudeUsageWidget
 
         void OnTick()
         {
-            // Une fenêtre vient d'être remise à zéro : on va chercher les nouvelles valeurs sans attendre.
-            if (windows != null && (DateTime.Now - lastAttempt).TotalSeconds > 60)
-                foreach (UsageWindow w in windows)
-                    if (w.ResetsAt.HasValue && w.ResetsAt.Value <= DateTimeOffset.Now)
-                    {
-                        FetchAsync();
-                        break;
-                    }
-            Invalidate();
+            RefreshData(false);
+            Invalidate();   // comptes à rebours et passage des remises à zéro
             UpdateTray();
-        }
-
-        void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
-        {
-            if (e.Mode != PowerModes.Resume || !IsHandleCreated) return;
-            BeginInvoke((MethodInvoker)delegate
-            {
-                backoff = 1;
-                FetchAsync();
-            });
         }
 
         UsageWindow Find(string key)
@@ -530,14 +483,14 @@ namespace ClaudeUsageWidget
             if (session != null)
             {
                 list.Add(new Segment("5 h  ", fontSmall, TextDim));
-                list.Add(new Segment(FormatPercent(session.Percent), fontBold, SeverityColor(session.Percent)));
-                if (session.ResetsAt.HasValue && session.ResetsAt.Value > DateTimeOffset.Now)
+                list.Add(new Segment(FormatPercent(session.CurrentPercent), fontBold, SeverityColor(session.CurrentPercent)));
+                if (session.ResetsAt.HasValue && !session.IsReset)
                     list.Add(new Segment("  → " + FormatWhen(session.ResetsAt.Value.LocalDateTime, true), fontSmall, TextDim));
             }
             if (week != null)
             {
                 list.Add(new Segment(session != null ? "     sem.  " : "sem.  ", fontSmall, TextDim));
-                list.Add(new Segment(FormatPercent(week.Percent), fontBold, SeverityColor(week.Percent)));
+                list.Add(new Segment(FormatPercent(week.CurrentPercent), fontBold, SeverityColor(week.CurrentPercent)));
             }
             if (status != null)
                 list.Add(new Segment("  !", fontBold, Warn));
@@ -576,11 +529,7 @@ namespace ClaudeUsageWidget
 
             float baseline = y + Ascent(fontTitle);
             DrawText(g, Title, fontTitle, TextMain, pad, baseline);
-            if (!string.IsNullOrEmpty(plan))
-                DrawText(g, PlanLabel(plan), fontSmall, Accent, pad + Measure(g, Title, fontTitle) + S(6), baseline);
-            string right = fetching ? "actualisation…"
-                : lastSuccess == DateTime.MinValue ? "" : "maj " + lastSuccess.ToString("HH:mm");
-            DrawTextRight(g, right, fontSmall, TextDim, width - pad, baseline);
+            DrawTextRight(g, UpdatedLabel(), fontSmall, TextDim, width - pad, baseline);
             y += S(24);
 
             if (windows == null || windows.Count == 0)
@@ -591,15 +540,16 @@ namespace ClaudeUsageWidget
 
             foreach (UsageWindow w in windows)
             {
-                Color color = SeverityColor(w.Percent);
+                double percent = w.CurrentPercent;
+                Color color = SeverityColor(percent);
                 float rowBaseline = y + Ascent(fontBold);
                 DrawText(g, w.Label, fontMain, TextMain, pad, rowBaseline);
-                DrawTextRight(g, FormatPercent(w.Percent), fontBold, color, width - pad, rowBaseline);
+                DrawTextRight(g, FormatPercent(percent), fontBold, color, width - pad, rowBaseline);
 
                 float barY = y + S(20);
                 float barW = width - 2 * pad;
                 FillRounded(g, Track, pad, barY, barW, S(5), S(2.5f));
-                float fill = (float)(barW * w.Percent / 100.0);
+                float fill = (float)(barW * Math.Min(percent, 100) / 100.0);
                 if (fill > 0) FillRounded(g, color, pad, barY, Math.Max(fill, S(5)), S(5), S(2.5f));
 
                 DrawText(g, ResetLabel(w), fontSmall, TextDim, pad, y + S(30) + Ascent(fontSmall));
@@ -685,10 +635,11 @@ namespace ClaudeUsageWidget
             return ((int)Math.Round(percent)).ToString(CultureInfo.InvariantCulture) + " %";
         }
 
-        static string PlanLabel(string raw)
+        string UpdatedLabel()
         {
-            if (string.IsNullOrEmpty(raw)) return "";
-            return char.ToUpperInvariant(raw[0]) + raw.Substring(1);
+            if (!updatedAt.HasValue) return "";
+            DateTime local = updatedAt.Value.LocalDateTime;
+            return "maj " + local.ToString(local.Date == DateTime.Today ? "HH:mm" : "dd/MM HH:mm", Fr);
         }
 
         static string ResetLabel(UsageWindow w)
@@ -696,10 +647,9 @@ namespace ClaudeUsageWidget
             if (!w.ResetsAt.HasValue)
                 return w.Key == "five_hour" ? "Aucune session en cours" : "";
             DateTime local = w.ResetsAt.Value.LocalDateTime;
-            TimeSpan left = local - DateTime.Now;
-            if (left <= TimeSpan.Zero)
-                return "Remise à zéro effectuée, actualisation…";
-            return "RAZ " + FormatWhen(local, false) + " · dans " + FormatSpan(left);
+            if (w.IsReset)
+                return "RAZ à " + FormatWhen(local, false) + " · en attente de Claude Code";
+            return "RAZ " + FormatWhen(local, false) + " · dans " + FormatSpan(local - DateTime.Now);
         }
 
         static string FormatWhen(DateTime local, bool compact)
@@ -726,9 +676,9 @@ namespace ClaudeUsageWidget
         void UpdateTray()
         {
             UsageWindow session = Find("five_hour");
-            string text = session != null ? ((int)Math.Round(session.Percent)).ToString(CultureInfo.InvariantCulture) : "?";
+            string text = session != null ? ((int)Math.Round(session.CurrentPercent)).ToString(CultureInfo.InvariantCulture) : "?";
             // L'icône garde les teintes vives quel que soit le thème du widget.
-            Color color = session != null ? SeverityColor(session.Percent, DarkPalette) : NoData;
+            Color color = session != null ? SeverityColor(session.CurrentPercent, DarkPalette) : NoData;
 
             string key = text + "|" + color.ToArgb();
             if (key != trayIconKey)
@@ -747,12 +697,12 @@ namespace ClaudeUsageWidget
                 tip = Title;
                 if (session != null)
                 {
-                    tip += " · 5 h : " + FormatPercent(session.Percent);
-                    if (session.ResetsAt.HasValue && session.ResetsAt.Value > DateTimeOffset.Now)
+                    tip += " · 5 h : " + FormatPercent(session.CurrentPercent);
+                    if (session.ResetsAt.HasValue && !session.IsReset)
                         tip += " (→ " + FormatWhen(session.ResetsAt.Value.LocalDateTime, true) + ")";
                 }
                 UsageWindow week = Find("seven_day");
-                if (week != null) tip += "\nSemaine : " + FormatPercent(week.Percent);
+                if (week != null) tip += "\nSemaine : " + FormatPercent(week.CurrentPercent);
                 if (status != null) tip += "\n" + status;
             }
             tray.Text = tip.Length > 63 ? tip.Substring(0, 62) + "…" : tip;
@@ -810,7 +760,7 @@ namespace ClaudeUsageWidget
             var m = new ContextMenuStrip();
 
             miShow = new ToolStripMenuItem("Afficher le widget", null, delegate { ToggleVisible(); });
-            var miRefresh = new ToolStripMenuItem("Actualiser maintenant", null, delegate { backoff = 1; FetchAsync(); });
+            var miRefresh = new ToolStripMenuItem("Actualiser maintenant", null, delegate { RefreshData(true); });
             var miConfig = new ToolStripMenuItem("Configuration…", null, delegate { OpenConfig(); });
             miCompact = new ToolStripMenuItem("Mode compact (double-clic)", null, delegate { ToggleCompact(); });
             miTopMost = new ToolStripMenuItem("Toujours au premier plan", null, delegate
@@ -832,21 +782,6 @@ namespace ClaudeUsageWidget
                 }) { Tag = v };
                 miOpacity.Add(item);
                 opacityMenu.DropDownItems.Add(item);
-            }
-
-            var intervalMenu = new ToolStripMenuItem("Fréquence d'actualisation");
-            foreach (int minutes in new[] { 1, 2, 5, 10 })
-            {
-                int seconds = minutes * 60;
-                var item = new ToolStripMenuItem("Toutes les " + minutes + " min", null, delegate
-                {
-                    settings.IntervalSec = seconds;
-                    SaveSettings();
-                    backoff = 1;
-                    FetchAsync();
-                }) { Tag = seconds };
-                miInterval.Add(item);
-                intervalMenu.DropDownItems.Add(item);
             }
 
             var themeMenu = new ToolStripMenuItem("Thème");
@@ -879,7 +814,7 @@ namespace ClaudeUsageWidget
             m.Items.AddRange(new ToolStripItem[]
             {
                 miShow, miRefresh, new ToolStripSeparator(),
-                miConfig, miCompact, miTopMost, themeMenu, opacityMenu, intervalMenu, miStartup,
+                miConfig, miCompact, miTopMost, themeMenu, opacityMenu, miStartup,
                 new ToolStripSeparator(), miQuit,
             });
 
@@ -889,9 +824,7 @@ namespace ClaudeUsageWidget
                 miCompact.Checked = settings.Compact;
                 miTopMost.Checked = settings.TopMost;
                 foreach (ToolStripMenuItem item in miTheme) item.Checked = (string)item.Tag == settings.Theme;
-                foreach (ToolStripMenuItem item in miOpacity) item.Checked = (int)item.Tag == settings.OpacityPercent;
-                foreach (ToolStripMenuItem item in miInterval) item.Checked = (int)item.Tag == settings.IntervalSec;
-                try { miStartup.Checked = Startup.IsEnabled(); }
+                foreach (ToolStripMenuItem item in miOpacity) item.Checked = (int)item.Tag == settings.OpacityPercent;                try { miStartup.Checked = Startup.IsEnabled(); }
                 catch (Exception) { miStartup.Checked = false; }
             };
             return m;

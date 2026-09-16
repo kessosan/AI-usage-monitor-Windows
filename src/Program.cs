@@ -1,5 +1,4 @@
 using System;
-using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -13,31 +12,29 @@ namespace ClaudeUsageWidget
 {
     static class Program
     {
+        public const string StatusLineArgument = "--statusline";
+
         [DllImport("user32.dll")]
         static extern bool SetProcessDPIAware();
 
         [STAThread]
-        static void Main()
+        static int Main(string[] args)
         {
+            // Appelé par Claude Code comme commande de ligne de statut : pas d'interface.
+            if (args.Length > 0 && args[0] == StatusLineArgument)
+                return StatusLineBridge.Run();
+
             bool createdNew;
             using (var mutex = new Mutex(true, "ClaudeUsageWidget_SingleInstance", out createdNew))
             {
-                if (!createdNew) return;
+                if (!createdNew) return 0;
 
                 SetProcessDPIAware();
-                try
-                {
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | (SecurityProtocolType)12288; // TLS 1.3
-                }
-                catch (NotSupportedException)
-                {
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                }
-
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 Application.Run(new WidgetForm());
             }
+            return 0;
         }
     }
 }

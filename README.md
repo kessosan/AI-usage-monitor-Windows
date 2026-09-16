@@ -1,15 +1,16 @@
 # AI usage monitor Windows
 
-Mini-widget Windows 11 qui affiche en temps réel le taux d'usage de votre abonnement Claude (Pro / Max) et l'heure de remise à zéro :
+Mini-widget Windows 11 qui affiche le taux d'usage de votre abonnement Claude (Pro / Max) et l'heure de remise à zéro :
 
 - **Session (5 h)** : pourcentage consommé, heure de RAZ et compte à rebours ;
-- **Semaine** : pourcentage consommé et date de RAZ ;
-- fenêtres hebdomadaires par modèle (Opus, Sonnet) et crédits supplémentaires quand votre offre en comporte.
+- **Semaine** : pourcentage consommé et date de RAZ.
 
 Deux affichages :
 
 - une **fenêtre flottante** « Utilisation Claude » sans bordure, déplaçable, aimantée aux bords de l'écran, en thème sombre, clair ou selon Windows, avec un mode compact d'une seule ligne (double-clic) ;
 - une **icône dans la zone de notification** qui affiche le % de la session. Sa couleur change à 75 % (jaune) puis à 90 % (rouge).
+
+Le widget **n'utilise aucun identifiant et n'accède pas au réseau**. Il affiche les quotas que Claude Code transmet officiellement à sa [ligne de statut](https://code.claude.com/docs/en/statusline) (champ `rate_limits`), enregistrés dans un fichier local.
 
 ## Installation
 
@@ -20,7 +21,7 @@ Deux affichages :
    ```powershell
    Get-FileHash .\ClaudeUsageWidget.exe -Algorithm SHA256
    ```
-3. Placez l'exe où vous voulez (par exemple `%LOCALAPPDATA%\Programs\ClaudeUsageWidget\`) et lancez-le. Aucune installation n'est nécessaire.
+3. Placez l'exe à un emplacement définitif (par exemple `%LOCALAPPDATA%\Programs\ClaudeUsageWidget\`), puis lancez-le. Aucune installation n'est nécessaire. L'emplacement doit rester stable, car la configuration de Claude Code y fait référence.
 
 L'exécutable n'est pas signé numériquement. Au premier lancement, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » : cliquez sur *Informations complémentaires*, puis *Exécuter quand même*.
 
@@ -33,9 +34,30 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 .\dist\ClaudeUsageWidget.exe
 ```
 
-### Prérequis
+### Brancher Claude Code
 
-Être connecté à **Claude Code** avec votre compte claude.ai (`claude /login`). Sinon, indiquez un jeton ou un fichier d'identifiants dans la configuration (voir plus bas).
+Prérequis : Claude Code, connecté avec un abonnement claude.ai **Pro ou Max**.
+
+Clic droit sur le widget > **Configuration…** : la fenêtre fournit les blocs prêts à copier. Choisissez **un seul** des deux cas suivants.
+
+**1. Vous n'avez pas encore de ligne de statut.** Ajoutez ce bloc dans `%USERPROFILE%\.claude\settings.json`, en adaptant le chemin de l'exe, puis redémarrez Claude Code :
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "\"C:/Users/<vous>/AppData/Local/Programs/ClaudeUsageWidget/ClaudeUsageWidget.exe\" --statusline"
+}
+```
+
+Claude Code appelle alors l'exe à chaque mise à jour de sa ligne de statut. L'exe enregistre les quotas, puis affiche un résumé court (`[Opus 5] | 5h 24% | 7j 41%`).
+
+**2. Vous utilisez déjà [claude-hud](https://github.com/jarrodwatts/claude-hud).** Ajoutez cette ligne dans la section `display` de `%USERPROFILE%\.claude\plugins\claude-hud\config.json` :
+
+```json
+"externalUsageWritePath": "C:\\Users\\<vous>\\AppData\\Roaming\\ClaudeUsageWidget\\usage.json"
+```
+
+**Autre ligne de statut :** elle peut écrire elle-même le fichier de données (format ci-dessous).
 
 Conseils :
 
@@ -49,62 +71,48 @@ Conseils :
 | Glisser la fenêtre | Déplacer (position mémorisée) |
 | Double-clic sur la fenêtre | Basculer entre le mode complet et le mode compact |
 | Clic gauche sur l'icône de notification | Afficher / masquer le widget |
-| Clic droit (fenêtre ou icône) | Menu : actualiser, configuration, compact, premier plan, thème, opacité, fréquence, démarrage, quitter |
+| Clic droit (fenêtre ou icône) | Menu : actualiser, configuration, compact, premier plan, thème, opacité, démarrage, quitter |
 | Alt+F4 sur le widget | Masque la fenêtre sans quitter l'application |
 
-## Configuration de l'accès au compte
-
-Clic droit > **Configuration…** permet de choisir la source du jeton d'accès :
-
-| Source | Fonctionnement |
-|---|---|
-| **Automatique** (par défaut) | Lit le jeton de Claude Code dans `%USERPROFILE%\.claude\.credentials.json` (ou `%CLAUDE_CONFIG_DIR%`). Claude Code se charge de le renouveler. |
-| **Fichier d'identifiants personnalisé** | Même format que Claude Code, à un autre emplacement. |
-| **Jeton saisi manuellement** | Le jeton est chiffré avec DPAPI (lié à votre session Windows) avant d'être stocké. Il est effacé dès qu'une autre source est choisie. |
-
-Le bouton **Tester la connexion** vérifie la source choisie avant l'enregistrement.
-
-### Données personnelles et sécurité
-
-- **Aucune donnée sensible dans le dépôt** : ni identifiant, ni mot de passe, ni jeton, ni chemin personnel.
-- **Stockage local** : tout est enregistré sur votre poste, hors du dossier du projet, dans `%APPDATA%\ClaudeUsageWidget\` :
-  - `settings.ini` : position, apparence, fréquence et source d'accès (jamais de secret) ;
-  - `token.dat` : jeton manuel **chiffré**, présent uniquement si cette source est utilisée.
-- **Fichier de Claude Code** : le widget le lit sans jamais le modifier.
-- **Destination du jeton** : il n'est envoyé qu'à `api.anthropic.com`.
+L'en-tête indique l'heure des dernières données reçues (« maj 14:05 »).
 
 ## Fonctionnement
 
-1. Le widget obtient le jeton OAuth selon la source configurée.
-2. Il appelle `GET https://api.anthropic.com/api/oauth/usage` avec les en-têtes :
-   - `Authorization: Bearer <jeton>`
-   - `anthropic-beta: oauth-2025-04-20`
-3. La réponse contient notamment :
-   ```json
-   {
-     "five_hour":  { "utilization": 7.0, "resets_at": "2026-09-16T14:30:00+00:00" },
-     "seven_day":  { "utilization": 1.0, "resets_at": "2026-09-23T03:00:00+00:00" },
-     "seven_day_opus": null,
-     "extra_usage": { "is_enabled": false, "utilization": null }
-   }
-   ```
-   `utilization` est déjà exprimé en pourcentage (0 à 100).
+1. Après chaque réponse, Claude Code transmet à la commande de ligne de statut un JSON qui contient `rate_limits.five_hour` et `rate_limits.seven_day` (pourcentage utilisé et heure de remise à zéro).
+2. La commande (`ClaudeUsageWidget.exe --statusline` ou claude-hud) enregistre ces valeurs dans `%APPDATA%\ClaudeUsageWidget\usage.json`. Si rien n'a changé, le fichier n'est réécrit qu'une fois toutes les 30 secondes au plus.
+3. Le widget vérifie ce fichier toutes les 5 secondes et se met à jour dès qu'il change.
 
-L'actualisation a lieu toutes les 2 minutes par défaut, avec un intervalle réglable de 1 à 10 minutes. Le compte à rebours se met à jour localement toutes les 15 secondes. Une actualisation est aussi lancée dès qu'une RAZ est passée et au réveil de l'ordinateur. En cas de réponse HTTP 429, l'intervalle double à chaque fois, sans dépasser 30 minutes.
+Format du fichier de données (dates en ISO-8601 ou en secondes Unix) :
+
+```json
+{
+  "updated_at": "2026-09-16T10:11:52Z",
+  "five_hour": { "used_percentage": 23.5, "resets_at": "2026-09-16T12:30:00Z" },
+  "seven_day": { "used_percentage": 41.2, "resets_at": "2026-09-21T03:00:00Z" }
+}
+```
+
+### Données personnelles et sécurité
+
+- **Aucun accès au compte :** le widget ne lit, ne stocke et ne transmet aucun identifiant, mot de passe ou jeton. Il ne fait aucune requête réseau.
+- **Fichiers locaux uniquement :** tout est enregistré sur votre poste, hors du dossier du projet, dans `%APPDATA%\ClaudeUsageWidget\` :
+  - `settings.ini` : position, apparence et emplacement du fichier de données ;
+  - `usage.json` : derniers pourcentages et heures de remise à zéro.
 
 ### Limites connues
 
-- **Endpoint non documenté** : c'est celui qu'utilisent Claude Code et claude.ai. Anthropic peut le modifier sans préavis.
-- **Renouvellement du jeton** : le jeton OAuth de Claude Code expire au bout de quelques heures et c'est Claude Code qui le renouvelle. Si Claude Code n'a pas été lancé depuis longtemps, le widget affiche « Jeton expiré » et conserve les dernières valeurs connues. Il suffit d'ouvrir Claude Code pour que tout reprenne. Le widget ne renouvelle pas le jeton lui-même : il devrait alors réécrire le fichier d'identifiants, ce qui risquerait de déconnecter Claude Code.
+- **Actualisation liée à Claude Code** : les valeurs ne changent que lorsque Claude Code reçoit une réponse. Ce que vous consommez sur claude.ai ou dans l'application Claude (les quotas sont partagés) n'apparaît qu'au prochain échange dans Claude Code. Une fois l'heure de remise à zéro passée, le widget affiche 0 % en attendant de nouvelles données.
+- **Abonnements concernés** : Claude Code ne transmet ces quotas que pour les abonnements Pro et Max.
+- **Environnements** : la ligne de statut est une fonctionnalité de Claude Code en terminal. Selon l'environnement (extension d'IDE, par exemple), elle peut ne pas s'exécuter.
 
 ## Structure
 
 ```
 src/
-  Program.cs       point d'entrée, instance unique, TLS
-  UsageClient.cs   obtention du jeton + appel API + parsing
-  Settings.cs      préférences .ini, jeton chiffré (DPAPI), lancement au démarrage (registre HKCU)
-  ConfigForm.cs    fenêtre de configuration de l'accès au compte
+  Program.cs       point d'entrée, instance unique, mode --statusline
+  UsageStore.cs    lecture et écriture du fichier de données, pont de ligne de statut
+  Settings.cs      préférences .ini, lancement au démarrage (registre HKCU)
+  ConfigForm.cs    fenêtre de configuration (fichier de données, branchement de Claude Code)
   WidgetForm.cs    fenêtre, dessin, thèmes, icône de notification, menu
 build.ps1          compilation avec csc.exe (paramètre -Version)
 .github/workflows/release.yml   compilation automatique et publication des Releases
